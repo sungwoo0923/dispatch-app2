@@ -25,7 +25,17 @@ export const paidTotalOf = (o) => (isPaidOrder(o) ? basePaidOf(o) + adjPaidOf(o)
 export const payGapOf = (o) => (isPaidOrder(o) ? toInt(o?.기사운임) - paidTotalOf(o) : 0);
 export const isPaidThenCanceled = (o) => isPaidOrder(o) && !!o?.지급후취소;
 
-const CLEAR = { 지급액: null, 지급액기록일: null, 지급조정액: null, 지급조정일: null, 지급후취소: null };
+const CLEAR = { 지급액: null, 지급액기록일: null, 지급조정액: null, 지급조정일: null, 지급후취소: null, 지급부가세: null };
+
+// 💸 2026-11-27 세금계산서 받는 기사(기사관리 '세금계산서 발행') — 실제 이체액 = 기사운임 + 부가세 10%
+//  오더의 지급액은 그대로 공급가(기사운임)라 지급 후 운임 변경 계산은 예전과 같고, 부가세는 지급부가세 칸에 따로 남긴다.
+//  장부 줄 금액 = 지급액 + 지급부가세(통장에서 나간 돈), 공급가 · 부가세 칸도 같이 쌓는다
+export const PAY_VAT_RATE = 0.1;
+export const paidVatOf = (o) => toInt(o?.지급부가세);
+const vatOn = (amount, rate) => (rate ? Math.round(toInt(amount) * rate) : 0);
+const bump = (date, supply, vat, count) => ({ date, amount: supply + vat, supply, vat, count });
+// 이체할 금액(확인창 · 대량이체와 같은 식) — invoice: 세금계산서 받는 기사인지
+export const payTransferOf = (o, invoice) => { const f = toInt(o?.기사운임); const v = invoice ? vatOn(f, PAY_VAT_RATE) : 0; return { supply: f, vat: v, total: f + v }; };
 
 // 지급 상태 바꾸기 → { patch, bumps:[{date, amount, count}], adjAmount: null(그대로) | 숫자(조정 줄을 이 금액으로, 0이면 지움) }
 //  next: { status: "지급완료" | "지급중", date, keepAmount }  keepAmount = 지급일만 옮기기(금액 그대로)
@@ -35,21 +45,24 @@ export function payLedgerPlan(row, next = {}, today = "") {
   const was = isPaidOrder(row);
   const fare = toInt(row?.기사운임);
   const base = basePaidOf(row);
+  const baseVat = paidVatOf(row); // 지급 때 같이 이체한 부가세(예전 오더 · 계산서 안 받는 기사는 0)
+  const rate = next.vatRate ? Number(next.vatRate) : 0; // 💸 2026-11-27 세금계산서 받는 기사면 0.1
   const oldDate = String(row?.지급일 || today || "").slice(0, 10);
   const viaStatement = !!row?.지급명세서ID; // 장부는 지급명세서 한 줄로
   const bumps = [];
   let patch; let adjAmount = null;
   if (status === "지급완료" && was && next.keepAmount) {
     patch = { 지급상태: "지급완료", 지급일: date, ...(hasVal(row?.지급액) ? {} : { 지급액: base, 지급액기록일: today }) };
-    if (date !== oldDate && base) bumps.push({ date: oldDate, amount: -base, count: -1 }, { date, amount: base, count: 1 });
+    if (date !== oldDate && base) bumps.push(bump(oldDate, -base, -baseVat, -1), bump(date, base, baseVat, 1));
   } else if (status === "지급완료") {
-    patch = { 지급상태: "지급완료", 지급일: date, 지급액: fare, 지급액기록일: today, 지급조정액: null, 지급조정일: null, 지급후취소: null };
-    if (was && base) bumps.push({ date: oldDate, amount: -base, count: -1 });
-    if (fare) bumps.push({ date, amount: fare, count: 1 });
+    const vat = vatOn(fare, rate);
+    patch = { 지급상태: "지급완료", 지급일: date, 지급액: fare, 지급액기록일: today, 지급조정액: null, 지급조정일: null, 지급후취소: null, 지급부가세: vat || null };
+    if (was && base) bumps.push(bump(oldDate, -base, -baseVat, -1));
+    if (fare) bumps.push(bump(date, fare, vat, 1));
     if (adjPaidOf(row)) adjAmount = 0;
   } else {
     patch = { 지급상태: status, 지급일: "", ...CLEAR };
-    if (was && base) bumps.push({ date: oldDate, amount: -base, count: -1 });
+    if (was && base) bumps.push(bump(oldDate, -base, -baseVat, -1));
     if (adjPaidOf(row)) adjAmount = 0;
   }
   return { patch, bumps: viaStatement ? [] : bumps, adjAmount: viaStatement ? null : adjAmount };
@@ -60,7 +73,9 @@ export function settleGapPlan(row, today = "") {
   const gap = payGapOf(row);
   if (!gap) return null;
   const adj = adjPaidOf(row) + gap;
-  return { gap, adjAmount: adj, patch: { 지급조정액: adj, 지급조정일: today, ...(hasVal(row?.지급액) ? {} : { 지급액: basePaidOf(row), 지급액기록일: today }) } };
+  // 💸 2026-11-27 지급 때 부가세를 같이 이체한 오더면 조정액의 부가세도(장부 = 조정액 + 부가세)
+  const adjVat = paidVatOf(row) ? vatOn(adj, PAY_VAT_RATE) : 0;
+  return { gap, adjAmount: adj, adjVat, patch: { 지급조정액: adj, 지급조정일: today, ...(hasVal(row?.지급액) ? {} : { 지급액: basePaidOf(row), 지급액기록일: today }) } };
 }
 
 // 오더 수정(patchDispatch) 전 확인 — 지급완료 오더의 기사운임 변경 · 취소
@@ -103,4 +118,37 @@ export function statementPayPatch(order, { stmtId, date, today = "" }) {
 export function statementUnpayPatch(order, stmtId) {
   if (!order || order.지급명세서ID !== stmtId) return null;
   return { 지급상태: "지급중", 지급일: "", 지급명세서ID: null, ...CLEAR };
+}
+
+// ── 🏷 2026-11-27 배차완료 오더 운임 변경 표시 ──
+//  배차완료(운행이 정해진) 오더의 청구운임 · 기사운임이 바뀌면 오더에 운임변경 = { at, by, 청구: [전, 후]?, 기사: [전, 후]? } (마지막 변경)
+//  → 배차현황 줄에 작은 '운임 변경' 표시. 같은 칸을 여러 번 바꾸면 처음 값(첫 '전')은 그대로 둔다. 전체 기록은 오더 변경 이력(history)
+const FARE_KEYS = [["청구운임", "청구"], ["기사운임", "기사"]];
+export function fareChangeMark(prev, patch = {}, { by = "", now = Date.now() } = {}) {
+  if (!prev || String(prev.배차상태 || "") !== "배차완료") return null;
+  const old = prev.운임변경 && typeof prev.운임변경 === "object" ? prev.운임변경 : null;
+  const out = {}; let hit = false;
+  FARE_KEYS.forEach(([k, s]) => {
+    if (!(k in patch) || toInt(patch[k]) === toInt(prev[k])) { if (old?.[s]) out[s] = old[s]; return; }
+    const first = Array.isArray(old?.[s]) ? toInt(old[s][0]) : toInt(prev[k]);
+    if (first === toInt(patch[k])) return; // 처음 값으로 돌아오면 그 칸은 표시 없음
+    out[s] = [first, toInt(patch[k])]; hit = true;
+  });
+  if (!hit) {
+    // 처음 값으로 돌아온 칸은 표시에서 뺀다(모두 돌아왔으면 표시를 지움)
+    if (!old || !FARE_KEYS.some(([k]) => k in patch && toInt(patch[k]) !== toInt(prev[k]))) return null;
+    return out.청구 || out.기사 ? { at: old.at || now, by: old.by || "", ...out } : { clear: true };
+  }
+  return { at: now, by: String(by || ""), ...out };
+}
+// 표시 글: "청구 350,000 → 380,000 · 기사 300,000 → 320,000"
+export function fareChangeText(m) {
+  if (!m || typeof m !== "object") return "";
+  return FARE_KEYS.map(([, s]) => (Array.isArray(m[s]) ? `${s} ${toInt(m[s][0]).toLocaleString()} → ${toInt(m[s][1]).toLocaleString()}` : "")).filter(Boolean).join(" · ");
+}
+// 🔒 지급완료 오더 기사운임 — 사무원(user)은 못 바꾼다(관리자 · 경리 권한은 그대로). bypass = 경리 · 통합관리자 등
+export const PAID_FARE_LOCK_MSG = "이미 지급한 오더라 기사운임은 관리자만 바꿀 수 있어요.\n운송 관리자나 경리팀에 바꿔 달라고 요청해 주세요.";
+export function paidFareLocked(role, bypass, prev, patch = {}) {
+  if (bypass || String(role || "") !== "user" || !isPaidOrder(prev)) return false;
+  return "기사운임" in patch && toInt(patch.기사운임) !== toInt(prev.기사운임);
 }

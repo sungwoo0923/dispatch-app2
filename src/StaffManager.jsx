@@ -62,10 +62,14 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
   const staff = mine.filter((u) => !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role));
   const drivers = mine.filter((u) => u.role === "driver");
   const active = staff.filter((u) => u.employmentStatus !== "퇴사");
+  // 🔒 2026-11-27 운송관리자(마스터 아님)는 재직 직원 목록에서 자기 부서(기본 물류운송팀)만 — PC 관리자메뉴 회원 관리와 같음(가입 승인 대기는 그대로)
+  const ownTeamOnly = !isMaster && (me?.role || role) === "admin";
+  const myTeam = normalizeTeam(me?.team) || "물류운송팀";
+  const teamOk = (u) => !ownTeamOnly || u.id === myUid || (normalizeTeam(u.team) ? normalizeTeam(u.team) === myTeam : ["admin", "user"].includes(u.role || "user"));
   const lists = {
     pending: active.filter((u) => !u.approved),
-    staff: active.filter((u) => u.approved),
-    left: staff.filter((u) => u.employmentStatus === "퇴사"),
+    staff: active.filter((u) => u.approved && teamOk(u)),
+    left: staff.filter((u) => u.employmentStatus === "퇴사" && teamOk(u)),
     dpending: drivers.filter((u) => u.approved === false),
     drivers: drivers.filter((u) => u.approved !== false),
   };

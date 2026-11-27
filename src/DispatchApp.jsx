@@ -7,7 +7,7 @@ import { useFleetDispatchWayInstall, FleetDispatchWayButton } from "./fleetDispa
 import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
 import { fareBaseSale, effectiveFareRule as fareEffRule, farePctOf as farePctOfO, applyFareRule as fareApply, ruleDriverFare as fareRuleDrv, toNum as fareToNum } from "./fareRulesCore.js"; // 🧾 2026-11-25 운임명세서 운임구분 %
 import { MENU_FEATURE, planIncludes, openPlanLock, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
-import { kpConfirm, kpPrompt } from "./kpDialog";
+import { kpConfirm, kpPrompt, kpChoose } from "./kpDialog";
 import { editLossReason, lossReasonOf } from "./lossReason"; // 📑 2026-11-15 손실 오더 손실 사유
 import { runDelete, commitDeletes, deleteDocsAtomic, runUpload, runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 runBulkTask — 일괄 저장 · 수정 진행 창
 import { SHEET_LINK_FIELDS, stripSheetLink } from "./sheetLinkFields"; // ⭐ 2026-11-17 복사본에 구글시트 줄 주소를 넘기지 않는다 // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
@@ -47,7 +47,10 @@ import DriverContextMenu, { driverCopyText, copyToClipboard } from "./DriverCont
 import { useDriverEditChoice, DriverEditButton, SamePlateChips, driversOfPlate, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "./DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
-import * as XLSX from "xlsx";
+// ⚡ 2026-11-27 속도 — xlsx(약 420KB)는 엑셀 버튼 · 엑셀 올리기를 누를 때 받는다(예전엔 배차 프로그램 첫 묶음에 들어 로그인 → HOME 이 늦었다).
+//  쓰는 함수마다 맨 앞에서 const XLSX = await loadXLSX() — 동작 · 파일 모양은 그대로
+const loadXLSX = () => import("xlsx");
+import { saveWorkbook, kstFileDate } from "./xlsxSave"; // 🛠 2026-11-27 엑셀 파일 이름이 'download'로 저장되던 문제
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
@@ -63,6 +66,7 @@ const ReceiptCenter = React.lazy(() => import("./ReceiptCenter")); // 🧾 2026-
 import { applyOwner } from "./orderOwner"; // 👤 2026-11-09 복사본 배차담당자
 import { routeOwnerFill } from "./routeOwnerApply"; // ⭐ 2026-11-17 담당노선 주인 — 빈 배차담당자 채우기
 import { isLockedOrder } from "../functions/routeOwnerCore.mjs";
+import { askCarryMonth } from "./carryMonth"; // 🗓 2026-11-27 이월 오더 일괄 마감월 지정
 import { buildSimpleList } from "./copySimple"; // 📋 2026-11-13 기사복사 간단 목록(여러 오더 한 번에)
 import { getSimpleTpl } from "./copyTemplates";
 import OrderStaffFields from "./OrderStaffFields"; // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기
@@ -74,7 +78,7 @@ import ClientMergeModal from "./ClientMergeModal"; // ⭐ 2026-11-17 거래처 �
 import { buildAliasMap, resolveOrderClient } from "./clientMerge"; // ⭐ 2026-11-17 합친 거래처의 옛 이름 → 남길 이름
 import DetailFilterButton, { applyDetailFilter, DetailScope, detailGroupOrder } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useCompanyBiz, bizOf, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, bizColorOf, bizStripeProps, BizLegend, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
-import JSZip from "jszip";
+// ⚡ 2026-11-27 속도 — jszip 은 [전체저장(압축)]을 누를 때 받는다(handleSaveAllZip)
 import { BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 팝빌 연동회원(🌦 날씨는 2026-11-18부터 대시보드에만 — 배차 목록에서 뺐다)
 import { BankAccountsCard, BankReviewQueue, SmsSettingsCard, AlimtalkSettingsCard } from "./PopbillAuto"; // 🏦 2026-11-08 은행 입금 자동 매칭
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
@@ -149,8 +153,10 @@ import { useUiScreen, uiMenuList, uiMenuLabel, uiFormDefaults } from "./uiConfig
 import { useCompanyDropdownOptions, DropdownOptionsManageButton, useCompanyDropdownSync, dropdownList } from "./companyDropdownOptions";
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 const RateCard = lazyView(() => import("./RateCard"));
-import AiAssistant from "./AiAssistant";
-import InternalMessenger from "./InternalMessenger";
+// ⚡ 2026-11-27 속도 — AI 비서 · 메신저는 떠 있는 버튼이라 화면이 뜬 뒤 따로 받는다(자리표시 없음 — 받는 동안 버튼만 잠깐 늦게 보인다).
+//  예전엔 배차 프로그램 첫 묶음에 같이 들어 로그인 → HOME 이 그만큼 늦었다
+const AiAssistant = lazyView(() => import("./AiAssistant"), null);
+const InternalMessenger = lazyView(() => import("./InternalMessenger"), null);
 import { calcLeaveBalance } from "./leaveUtils";
 import { useMyLeaveExtras, useLeaveBasis } from "./leaveBasis"; // ⭐ 2026-11-07 내정보 연차 = 전자결재 연차 현황
 import { useCompanyWorkWeekdays } from "./workWeekdays"; // 🗓 2026-11-23 회사 근무 요일
@@ -3073,7 +3079,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride, op
   //  새 오더가 처음부터 "운송완료·지급완료"로 보였다 — 복사본은 새 운행으로 시작
   ["기사확인상태", "기사확인일시", "기사확인값", "상차완료일시", "하차완료일시", "기사완료일시", "배차확정일시", "배차확정자", "배차완료일시",
     "지급상태", "지급일", "지게차지급완료", "지게차지급일", "history", "최종수정자", "취소처리일시",
-    "지급액", "지급액기록일", "지급조정액", "지급조정일", "지급후취소", "지급명세서ID", "외부지급"].forEach((k) => { delete payload[k]; }); // 💸 2026-11-25 지급한 금액 기록도 복사하지 않기(외부지급 = 외부 특수운임 지급 기록 포함)
+    "지급액", "지급액기록일", "지급조정액", "지급조정일", "지급후취소", "지급명세서ID", "외부지급", "지급부가세", "운임변경"].forEach((k) => { delete payload[k]; }); // 💸 2026-11-25 지급한 금액 기록도 복사하지 않기(외부지급 = 외부 특수운임 지급 기록 포함)
   // 📎 2026-11-12 첨부 · 증빙 · 정산 진행값은 복사하지 않는다 — 예전엔 원본의 첨부 개수(attachCount)만 딸려 와서
   //  복사본에 첨부 "1"이 떠 있는데 눌러 보면 아무것도 없었다(파일은 원본 오더에만 있다). 복사본은 첨부 없이 · 미청구로 시작
   ["attachCount", "officeAttach", "attachViewed", "업로드잠금", "업로드잠금해제만료", "재업로드완료알림", "업로드토큰", "업로드토큰발급",
@@ -3217,8 +3223,8 @@ import { pickUnassignedOrders } from "./unassignedRule"; // ⭐ 2026-11-05 PC·�
 import { useBadgeSeenSync, useUnseenItems, useMarkSeenOnView, unionCount } from "./seenBadges"; // ⭐ 2026-11-06 메뉴 숫자 = 계정별 안 본 것
 import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
-import { bumpDriverPayout, addClientCollection, removeClientCollections, setDriverPayAdjust } from "./ledgerAuto";
-import { payLedgerPlan, settleGapPlan, payGapOf, isPaidThenCanceled, paidEditGuard, paidDeleteWarn } from "./payCore"; // 💸 2026-11-25 지급한 금액 기록(지급액)
+import { bumpDriverPayout, addClientCollection, removeClientCollections, setDriverPayAdjust, payFundInfo, setPayFundDefault } from "./ledgerAuto";
+import { payLedgerPlan, settleGapPlan, payGapOf, isPaidThenCanceled, paidEditGuard, paidDeleteWarn, payTransferOf, PAY_VAT_RATE, paidVatOf, fareChangeMark, paidFareLocked, PAID_FARE_LOCK_MSG, fareChangeText } from "./payCore"; // 💸 2026-11-25 지급한 금액 기록(지급액)
 // 💸 지급한 오더를 고칠 때 확인 — 여러 건을 한 번에 고쳐도 창이 줄줄이 뜨지 않게(한 번 [네]면 10초 동안은 다시 묻지 않는다)
 let _paidEditAckUntil = 0; let _paidEditAsk = null;
 const confirmPaidEdit = (msg) => {
@@ -3248,7 +3254,7 @@ import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
-import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
+import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown, canEditFareRules } from "./fareRules";
 import { SpecialFareTag, SpecialFareLine } from "./specialFareTag";
 import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats as calcFareStats } from "./FareResultUi"; // ⚠ 이 파일에 같은 이름 상태값(fareStats)이 있어 다른 이름으로 // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
@@ -3890,7 +3896,8 @@ const DEPT_MENUS = {
   hr: ["HOME", "전자결재", "인사관리부", "증명서발급", "관리자메뉴", "회사관리"],
   // 💼 2026-11-10 영업: 영업관리(실적·인센티브·영업 기회) + 거래처·단가·운임 + 확인용 배차현황 — 배차 등록·정산은 빼고
   // 🧹 2026-11-15 영업은 홈 · 전자결재 · 영업관리 · 회사관리만 — 배차현황 · 운임 · 배차자용 거래처관리 · 배차 기준 매출관리는 뺐다(내 매출 · 인센 · 내 거래처는 영업관리 안에서)
-  sales: ["HOME", "전자결재", "영업관리", "회사관리"],
+  // 🧾 2026-11-27 견적서 작성(단가표 › 직접 작성 · 발행 이력, 운임조회 › 운임 산출)은 영업 일 — 단가표 · 운임조회를 다시 넣었다
+  sales: ["HOME", "전자결재", "영업관리", "단가표", "운임조회", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
   exec: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "비공개운임", "스케줄", "매출관리", "영업관리", "인사이트", "관리자메뉴", "회사관리"], // 📊 2026-11-06 일일 경영 보고 — 임원 홈(경영 브리핑) 바로 다음 // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
@@ -5477,6 +5484,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   // 💸 2026-11-25 지급완료 오더의 기사운임 변경 · 취소 — 한 번 묻고, 장부는 그대로(지급액 고정 · "지급 후 운임 변경 / 지급 후 취소" 표시 · src/payCore.js)
   //   (정산 기록 __system 저장은 묻지 않고 지급액 고정만)
   if (patch && (!("지급상태" in patch) || patch.지급상태 === prev?.지급상태)) { // 오더 전체 저장(같은 지급상태가 딸려 옴)도 검사
+    // 🔒 2026-11-27 지급완료 오더의 기사운임은 관리자(운송 · 경리)만 바꾼다 — 사무원(user)이 바꾸려 하면 안내하고 저장하지 않는다
+    if (!patch.__system && paidFareLocked(role, finalBypass, prev, patch)) { globalShowAlert(PAID_FARE_LOCK_MSG); return false; }
     const _pg = paidEditGuard(prev, patch, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
     if (_pg.warn && !patch.__system && !(await confirmPaidEdit(_pg.warn))) return false;
     Object.assign(patch, _pg.extra);
@@ -5711,6 +5720,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     }
   });
 
+  // 🏷 2026-11-27 배차완료 오더의 청구운임 · 기사운임을 바꾸면 '운임 변경' 표시(배차현황 줄) — 누가 · 언제 · 전 → 후(마지막 변경). 전체 기록은 변경 이력(history)
+  { const fc = fareChangeMark(prev, cleanPatch, { by: auth.currentUser?.email || "" }); if (fc) cleanPatch.운임변경 = fc.clear ? null : fc; }
   const historyArr = Array.isArray(prev.history) ? prev.history : [];
   if (!prev.createdAt) {
     cleanPatch.createdAt = prev.updatedAt || prev.createdTime || Date.now();
@@ -9117,13 +9128,26 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
     }
   }, [role]);
 
+  // 🔎 2026-11-27 화면 전환 역할(통합관리자 · 최고관리자 · 통합인사관리자) — 다른 화면에만 있는 메뉴 → 그 화면 키
+  //  통합 검색(Ctrl + K) · 도움말 센터에서 찾을 수 있게 하고, 누르면 그 화면으로 바꿔서 연다(handleMenuClick)
+  const otherViewMenus = React.useMemo(() => {
+    const out = {};
+    const views = roleView.views;
+    if (!views || execHome) return out;
+    const cur = roleView.view || views[0][0];
+    const DISPATCH_ONLY = ["배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회", "기사관리", "거래처관리", "매출관리", "지입차관리"];
+    if (cur !== "dispatch" && views.some(([k]) => k === "dispatch")) DISPATCH_ONLY.forEach((m) => { out[m] = "dispatch"; });
+    views.forEach(([k]) => { if (k !== cur && DEPT_MENUS[k] && k !== "exec") DEPT_MENUS[k].forEach((m) => { if (!(m in out)) out[m] = k; }); });
+    return out;
+  }, [roleView.views, roleView.view, execHome]);
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = async (m) => {
     // ✋ 작성 중인 문서(전자결재·증명서 등)가 있으면 먼저 저장할지 묻는다
     if (m !== menu && !(await confirmLeave())) return;
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) { openPlanLock(MENU_FEATURE[m]); return; }
     // 🧾 2026-11-14 운송 화면에서 정산관리 바로가기(홈 카드 · 검색)를 누르면 경리 화면으로 바꿔서 연다
-    const toView = switchViewFor(realRole, roleView.view, m);
+    //  🔎 2026-11-27 검색에서 고른 다른 화면 메뉴(지금 화면엔 없는 메뉴)도 그 화면으로 바꿔서 연다
+    const toView = switchViewFor(realRole, roleView.view, m) || (menuState(m) !== "ok" ? otherViewMenus[m] || "" : "");
     if (toView) { roleView.setView(toView); React.startTransition(() => setMenu(m)); return; }
     if (!deptMode && (role === "user" || role === "test") && blockedMenus.includes(m)) return;
     if (m !== "매출관리") setRevenueUnlocked(false);
@@ -9149,6 +9173,37 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
     window.addEventListener("kp-bank-ar-match", h);
     return () => window.removeEventListener("kp-bank-ar-match", h);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 🔙 2026-11-27 PC 브라우저 [뒤로] — 메뉴 이동 · 화면 전환을 브라우저 기록에 쌓는다(예전엔 한 번 누르면 프로그램 밖으로 나갔다)
+  //  주소는 그대로 두고 기록의 state(kpNav: 메뉴 · 화면)만 남긴다 — [뒤로]/[앞으로]를 누르면 그 메뉴 · 화면으로 돌아간다
+  const navPopRef = React.useRef(false);
+  const navNowRef = React.useRef({ m: menu, v: roleView.view || "" });
+  navNowRef.current = { m: menu, v: roleView.view || "" };
+  React.useEffect(() => {
+    const cur = { m: menu, v: roleView.view || "" };
+    if (navPopRef.current) { navPopRef.current = false; return; }
+    let st = null;
+    try { st = window.history.state || {}; } catch { return; }
+    const was = st.kpNav;
+    if (was && was.m === cur.m && was.v === cur.v) return;
+    try {
+      if (!was) window.history.replaceState({ ...st, kpNav: cur }, "");
+      else window.history.pushState({ ...st, kpNav: cur }, "");
+    } catch { /* 무시 */ }
+  }, [menu, roleView.view]);
+  React.useEffect(() => {
+    const onPop = (e) => {
+      const nav = e.state?.kpNav;
+      if (!nav || !nav.m) return; // 프로그램 첫 화면보다 더 뒤 — 브라우저 기본 동작
+      const now = navNowRef.current;
+      const viewChange = !!nav.v && !!roleView.views && nav.v !== now.v && roleView.views.some(([k]) => k === nav.v);
+      if (!viewChange && nav.m === now.m) return;
+      navPopRef.current = true;
+      if (viewChange) roleView.setView(nav.v);
+      setMenu(nav.m);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [roleView.views, roleView.setView]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sideMenuOpen, setSideMenuOpen] = React.useState(false);
   const closeSideMenu = React.useCallback(() => setSideMenuOpen(false), []);
 
@@ -9256,6 +9311,8 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
     if (["회계관리", "인사관리부", "출근기록부", "직원관리", "기사서류", "자금관리", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) return ["회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급"].includes(m) && ownOk(m) ? "ok" : "hidden";
     // ⭐ 2026-11-04 회사 마스터가 권한 관리에서 관리자 메뉴를 숨겨도 본인은 잠기지 않게(다시 고칠 수 있도록)
     if (m === "관리자메뉴" && role === "admin" && myProfileDoc?.isMaster === true) return "ok";
+    // 🔒 2026-11-27 눌러도 열리지 않는 메뉴는 숨긴다(handleMenuClick 과 같은 조건) — 권한 관리에 운송사무원 설정을 저장한 회사는 매출관리가 보이는데 눌러도 반응이 없었다
+    if (!deptMode && (role === "user" || role === "test") && blockedMenus.includes(m)) return "hidden";
     if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
     const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
     if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && role !== "viewer") return "hidden"; // 🔒 2026-11-14 예전 !isViewer — 지금 보는 메뉴가 '조회'면 운송사무원 등에게도 관리자메뉴가 보였다
@@ -9614,8 +9671,12 @@ return (
       <CloseInboxBanner inbox={closeInbox} onOpen={(x) => { handleMenuClick("정산관리"); setTimeout(() => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client: x.client, ym: x.ym } })), 120); }, 60); }} />
       {/* ★ 2026-11-12 자주 쓰는 메뉴(접었다 펴기) · 통합 검색 창 · 도움말 센터 — 지금 이 계정에 보이는 메뉴로 자동 구성 */}
       <QuickNav menu={menu} isMaster={realRole === "totalMaster"} /* 🔒 2026-11-18 도움말 '새 기능 · 바뀐 점'은 최고관리자만 */
-        menus={uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok")}
-        onGo={(m, code, key) => { handleMenuClick(m); if (code && key) setTimeout(() => emitSubnav(code, key), 0); }} />
+        menus={(() => { // 🔎 2026-11-27 지금 화면 메뉴 + (화면 전환 역할) 다른 화면에만 있는 메뉴 — 누르면 그 화면으로 바꿔서 연다
+          const cur = uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok");
+          const extra = Object.keys(otherViewMenus).filter((m) => !cur.includes(m) && menuState(m) !== "locked");
+          return [...cur, ...extra];
+        })()}
+        onGo={(m, code, key) => { const sw = !!otherViewMenus[m] && menuState(m) !== "ok"; handleMenuClick(m); if (code && key) setTimeout(() => emitSubnav(code, key), sw ? 400 : 0); }} />
 
 
       {/* 화주사 푸시 알림 — 상차 예정시각이 임박했는데 미처리인 오더를 화주사가 푸시하면 중앙에 확인 전까지 표시 */}
@@ -13096,8 +13157,9 @@ const handleMultiRegSmartDriverInput = (text) => {
         })
     : (name && name.length >= 2)
     ? (drivers || []).filter(d => d.이름 && d.이름.includes(name))
-    : [];
+    : smartDigitsMatch(drivers, text, phone);
   setMrSmartDriverMatched(results.slice(0, 8));
+  if (!plate && results.length) setMrSmartDriverActiveIdx(0);
 };
 
 const selectMultiRegSmartDriver = (d) => {
@@ -13129,6 +13191,8 @@ const handleMultiRegSmartDriverKeyDown = (e) => {
     e.preventDefault();
     if (mrSmartDriverMatched.length > 0 && mrSmartDriverActiveIdx >= 0 && mrSmartDriverActiveIdx < mrSmartDriverMatched.length) {
       selectMultiRegSmartDriver(mrSmartDriverMatched[mrSmartDriverActiveIdx]);
+    } else if (mrSmartDriverMatched.length > 0 && !parseDriverText(mrSmartDriverQuery).plate) {
+      selectMultiRegSmartDriver(mrSmartDriverMatched[0]); // 🛠 2026-11-27 Enter = 첫 번째 기사
     } else {
       applyMultiRegSmartDriverInput(mrSmartDriverQuery);
     }
@@ -14222,7 +14286,7 @@ React.useEffect(() => {
       ...p,
       차량번호: clean,
       이름: list[0].이름 || "",
-      전화번호: list[0].전화번호 || "",
+      전화번호: formatPhone(list[0].전화번호 || ""), // 🛠 2026-11-27 010-0000-0000 형식으로(예전 기사 문서는 01000009101 처럼 숫자만)
       배차상태: "배차완료",
     }));
     setDriverDropdownOpen(false);
@@ -14230,15 +14294,15 @@ React.useEffect(() => {
   }
 
   // 🔥 기존 기사 없음 → 입력 중에는 아무것도 안함
-  setForm((p) => ({
-    ...p,
-    이름: "",
-    전화번호: "",
-    배차상태: "배차중",
-  }));
+  //  🛠 2026-11-27 앞서 자동으로 채운 기사 정보만 지운다 — 손으로 먼저 적어 둔 기사명 · 전화는 남겨 신규 기사 등록 창에 넘긴다
+  const dg = (v) => String(v || "").replace(/\D/g, "");
+  const fromList = (p) => !!p.이름 && (drivers || []).some((d) => (d.이름 || "") === p.이름 && dg(d.전화번호) === dg(p.전화번호));
+  setForm((p) => (fromList(p) ? { ...p, 이름: "", 전화번호: "", 배차상태: "배차중" } : { ...p, 배차상태: "배차중" }));
 
   setDriverDropdownOpen(false);
 };
+// 🛠 2026-11-27 신규 기사 등록 창을 이미 띄운 차량번호(같은 차를 두 번 묻지 않게)
+const newDrvAskedRef = React.useRef("");
 const checkNewDriver = (carNo) => {
   const clean = (carNo || "").trim().replace(/\s+/g, "");
 
@@ -14254,13 +14318,14 @@ const checkNewDriver = (carNo) => {
         // 이미 이름이 있으면 (스마트검색으로 세팅됨) → 건드리지 않음
         return p;
       }
-      // 이름이 없을 때만 신규 기사 등록 모달
-      setDriverModal({
+      // 이름이 없을 때만 신규 기사 등록 모달 — 🛠 2026-11-27 오더 폼에 먼저 적은 전화번호는 미리 채운다 · 한 차량번호는 한 번만 묻는다
+      newDrvAskedRef.current = clean;
+      setDriverModal((m) => (m.open && m.carNo === clean ? m : {
         open: true,
         carNo: clean,
-        name: "",
-        phone: "",
-      });
+        name: p.이름 || "",
+        phone: p.전화번호 ? formatPhone(p.전화번호) : "",
+      }));
       return {
         ...p,
         차량번호: clean,
@@ -14288,6 +14353,8 @@ const checkDriverConflict = () => {
 
   // 🔹 기존 기사님이 없으면 → 신규 등록 여부 확인
   if (!list || list.length === 0) {
+    // 🛠 2026-11-27 이 차량번호로 신규 기사 등록 창을 이미 띄웠으면 다시 묻지 않는다(등록했거나 닫았으면 오더 저장 때 자동 등록)
+    if (newDrvAskedRef.current === plate) return;
     // 차량번호 + 이름 + 전화번호가 모두 있으면 자동 등록 제안
     if (name && phone) {
       setDriverConflictPopup({
@@ -15509,7 +15576,20 @@ React.useEffect(() => { setCopyShowMore(false); }, [copyQ, copyFilterType]);
 const [copySelected, setCopySelected] = React.useState([]);
 
 // 🔥 오더 복사 전용 (유일한 진입점)
-const applyCopy = (r) => {
+// 🛠 2026-11-27 시간은 오전/오후가 붙은 값만 복사(예전 오더의 '09:00' · '9시'를 그대로 복사하면 시간칸엔 빈칸으로 보이는데 저장 때 "오전/오후를 함께 선택해주세요"로 막혔다)
+//  quick: 한 줄 빠른 등록 — 지난 노선의 시간 · 메모 · 원본 오더에만 적힌 담당자는 가져오지 않는다(문장에 없는 값이 조용히 들어오지 않게)
+const copyTimeOf = (t) => {
+  const s = String(t || "").trim();
+  if (/^오[전후] /.test(s)) return s;
+  const m = s.match(/^(\d{1,2}):(\d{2})$/); // 24시간 표기만 오전/오후로 바꾼다("9시"처럼 오전·오후를 모르는 값은 비운다)
+  if (!m) return "";
+  const h = Number(m[1]); const mm = Number(m[2]);
+  if (h > 23 || mm > 59) return "";
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${h < 12 ? "오전" : "오후"} ${hh}시${mm ? ` ${mm}분` : ""}`;
+};
+const applyCopy = (r, opt = {}) => {
+  const quick = opt.quick === true;
   bizSeedRef.current = String(r.청구사업자 || "").trim(); bizManualRef.current = null; // ⭐ 2026-11-03 청구 사업자 자동 맞춤에 복사한 오더의 사업자를 넘긴다
   const pickupPlace = findPlaceByName(r.상차지명);
   const dropPlace   = findPlaceByName(r.하차지명);
@@ -15531,14 +15611,14 @@ const applyCopy = (r) => {
     // ✅ 상차지
     상차지명: r.상차지명 || "",
     상차지주소: pickupPlace?.주소 || r.상차지주소 || "",
-    상차지담당자: pickupPlace?.담당자 || r.상차지담당자 || "",
-    상차지담당자번호: pickupPlace?.담당자번호 || r.상차지담당자번호 || "",
+    상차지담당자: pickupPlace?.담당자 || (quick ? "" : r.상차지담당자) || "",
+    상차지담당자번호: pickupPlace?.담당자번호 || (quick ? "" : r.상차지담당자번호) || "",
 
     // ✅ 하차지
     하차지명: r.하차지명 || "",
     하차지주소: dropPlace?.주소 || r.하차지주소 || "",
-    하차지담당자: dropPlace?.담당자 || r.하차지담당자 || "",
-    하차지담당자번호: dropPlace?.담당자번호 || r.하차지담당자번호 || "",
+    하차지담당자: dropPlace?.담당자 || (quick ? "" : r.하차지담당자) || "",
+    하차지담당자번호: dropPlace?.담당자번호 || (quick ? "" : r.하차지담당자번호) || "",
 
 // ✅ 경유지 복사 (두 필드 모두 체크 - length로 빈배열 vs 빈배열 처리)
 경유상차목록: (() => { const pa=(v)=>{if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}};const a=pa(r.경유상차목록);const b=pa(r.경유지_상차);return a.length?a:b; })(),
@@ -15555,13 +15635,13 @@ const applyCopy = (r) => {
     하차방법: r.하차방법 || "",
     상차일: todayStr,
     하차일: todayStr,
-    상차시간: r.상차시간 || "",
-    상차시간기준: r.상차시간기준 ?? null,
-    하차시간: r.하차시간 || "",
-    하차시간기준: r.하차시간기준 ?? null,
+    상차시간: quick ? "" : copyTimeOf(r.상차시간),
+    상차시간기준: quick || !copyTimeOf(r.상차시간) ? null : r.상차시간기준 ?? null,
+    하차시간: quick ? "" : copyTimeOf(r.하차시간),
+    하차시간기준: quick || !copyTimeOf(r.하차시간) ? null : r.하차시간기준 ?? null,
     지급방식: r.지급방식 || "",
     배차방식: "",
-    메모: r.메모 || "",
+    메모: quick ? "" : r.메모 || "",
     // 전달사항은 원본에서 "고정"을 눌러둔 경우에만 복사본으로 함께 넘어와야 한다 —
     // 고정하지 않고 저장한 오더의 전달사항은 그 오더에만 해당하는 일회성 내용이라
     // 오더복사/동일 노선 재입력 시 그대로 따라와서는 안 된다.
@@ -15797,6 +15877,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   return { phone, plate, name };
 };
 const normD = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
+// 🔎 2026-11-27 스마트검색 — 차량번호 · 전화번호 뒤 4자리(예: 9101)나 전화번호 전체로도 기사를 찾는다(실무에선 "9101 차"처럼 뒷자리로 부른다)
+const smartDigitsMatch = (list, text, phone) => {
+  if (phone) return (list || []).filter(d => normD(d.전화번호) === normD(phone));
+  const q = normD(text);
+  if (!/^\d{4}$/.test(q)) return [];
+  const dg = (v) => String(v || "").replace(/\D/g, "");
+  return (list || []).filter(d => dg(d.차량번호).endsWith(q) || dg(d.전화번호).endsWith(q));
+};
 
 const handleSmartDriverInput = (text) => {
   setSmartDriverQuery(text);
@@ -15821,8 +15909,9 @@ const results = plate
       })
   : (name && name.length >= 2)
   ? (drivers||[]).filter(d => d.이름 && d.이름.includes(name))
-  : [];
+  : smartDigitsMatch(drivers, text, phone);
 setSmartDriverMatched(results.slice(0, 8));
+if (!plate && results.length) setSmartDriverActiveIdx(0); // 첫 번째 기사를 강조 — Enter 로 바로 고른다
 };
 
 // 스마트 검색 결과 선택
@@ -15876,6 +15965,9 @@ const handleSmartDriverKeyDown = (e) => {
     e.preventDefault();
     if (smartDriverMatched.length > 0 && smartDriverActiveIdx >= 0 && smartDriverActiveIdx < smartDriverMatched.length) {
       selectSmartDriver(smartDriverMatched[smartDriverActiveIdx]);
+    } else if (smartDriverMatched.length > 0 && !parseDriverText(smartDriverQuery).plate) {
+      // 🛠 2026-11-27 이름 · 뒷자리로 찾은 목록에서 Enter = 첫 번째 기사 선택(예전엔 검색어만 기사명에 들어가고 차량번호 · 전화는 빈칸)
+      selectSmartDriver(smartDriverMatched[0]);
     } else {
       applySmartDriverInput(smartDriverQuery);
     }
@@ -16009,7 +16101,7 @@ React.useEffect(() => {
       <>
         {/* ⭐ 2026-11-13 한 줄 빠른 등록 — 지난 노선을 찾아 오더복사와 같은 방식으로 채운다 */}
         {!isViewer && <QuickOrderLine rows={dispatchData} userCompany={userCompany} canMoney={canMoney} onApply={(row, o) => {
-          if (row) applyCopy(row);
+          if (row) applyCopy(row, { quick: true });
           // 🚚 2026-11-15 화물내용 · 상차→하차 이름도 한 줄에서(지난 노선이 없어도 적은 값은 채운다)
           setForm((p) => ({ ...p, ...(o.date ? { 상차일: o.date, 하차일: o.date } : {}), ...(o.ton ? { 차량톤수: o.ton, 톤수값: o.ton.replace("톤", ""), 톤수타입: "톤" } : {}), ...(o.kind ? { 차량종류: o.kind } : {}), ...(o.cargo ? { 화물내용: o.cargo } : {}), ...(!row && o.from ? { 상차지명: o.from } : {}), ...(!row && o.to ? { 하차지명: o.to } : {}) }));
           if (o.kind) setVehicleQuery(o.kind);
@@ -18880,6 +18972,20 @@ className={`
   </div>
   )}
 
+  {/* 🗓 2026-11-27 마감월(이월 오더) — 시뮬레이션: 운송팀이 "10/31 상차 · 11월 마감"을 정할 곳이 없어 경리에서 10월 청구로 잡혔다.
+       비워 두면 예전처럼 상차일의 달(거래처 마감일이 있으면 그 기준). 정하면 명세서 · 미수금 · 매출 · 회계가 모두 이 달로 잡힌다(arCore.monthOf) */}
+  {ofShow("마감월") && (
+  <div data-of="closeym">
+    <label className={labelCls} title="상차한 달과 청구할 달이 다를 때만 고르세요. 비워 두면 상차일의 달로 청구돼요.">마감월 <span className="text-[11px] font-semibold text-gray-400">(이월일 때만)</span></label>
+    <div className="flex gap-1">
+      <input type="month" className={inputCls} value={String(form.마감월 || "").slice(0, 7)} onChange={(e) => onChange("마감월", e.target.value)} />
+      {(() => { const d = String(form.상차일 || ""); if (!/^\d{4}-\d{2}/.test(d)) return null; const [y, m] = d.slice(0, 7).split("-").map(Number); const nx = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`; return form.마감월
+        ? <button type="button" className="shrink-0 px-2 rounded-lg border border-gray-300 text-[12px] font-bold text-gray-600" onClick={() => onChange("마감월", "")}>지우기</button>
+        : <button type="button" className="shrink-0 px-2 rounded-lg border border-gray-300 text-[12px] font-bold text-gray-600 whitespace-nowrap" onClick={() => onChange("마감월", nx)}>익월({Number(nx.slice(5))}월)</button>; })()}
+    </div>
+  </div>
+  )}
+
   {ofShow("배차방식") && ( /* 🧩 입력칸 설정 */
   <div data-of="way">
     <label className={labelCls}><EditableText id="orderForm.label.배차방식" defaultText="배차방식" /><DropdownOptionsManageButton optKey="배차방식" label="배차방식" role={role} userCompany={userCompany} /></label>
@@ -20243,8 +20349,9 @@ className={`
                 _id: driverModal.carNo,
                 차량번호: driverModal.carNo,
                 이름: driverModal.name,
-                전화번호: rawPhone,
+                전화번호: formatPhone(rawPhone), // 🛠 2026-11-27 다른 기사와 같은 010-0000-0000 형식으로 저장(예전엔 숫자만 저장돼 01000009101 로 보였다)
               });
+              sflowToast(`기사를 등록했어요 · ${driverModal.name}`, "success");
 
               // ⭐ 다중등록 모달에서 열린 경우엔 form이 아니라 해당 슬롯에 반영해야
               // 해서, 호출자가 onConfirm 콜백을 넘겨줬으면 그걸 대신 사용한다 —
@@ -23863,6 +23970,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
     if (!targets.length) { alert("저장할 첨부파일이 없습니다."); return; }
     setBulkSaving(true);
     try {
+      const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
       const usedNames = new Set();
       for (let i = 0; i < targets.length; i++) {
@@ -28748,7 +28856,8 @@ const head = isDark
 
     <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.선택삭제" defaultText="선택삭제" /></button>
     <button onClick={()=>setSelected([])} className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.선택초기화" defaultText="선택초기화" /></button>
-    <button onClick={()=>{
+    <button onClick={async ()=>{
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
   if(!filtered.length)return showAlert("내보낼 데이터가 없습니다.");
   const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
   const _merge=(r,f1,f2)=>[..._sp(r[f1]),..._sp(r[f2])].filter(s=>s&&(s.업체명?.trim()||s.주소?.trim())).filter((s,i,a)=>{const k=s.업체명||s.주소;return a.findIndex(x=>(x.업체명||x.주소)===k)===i;});
@@ -28762,10 +28871,10 @@ const head = isDark
     row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유하차목록])||"";
     row.차량종류=r.차량종류||"";
     row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유하차목록])||"";
-    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:orderProfit(r),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
+    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:formatPhone(r.전화번호||""),배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:orderProfit(r),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
-  const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
+  const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");saveWorkbook(XLSX,wb,`실시간배차현황_${kstFileDate()}.xlsx`); /* 🛠 2026-11-27 파일 이름이 'download'로 저장되던 문제 · 날짜를 이름에 · 전화번호 010-0000-0000 */
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.엑셀다운" defaultText="엑셀다운" /></button>
     </div>
 </div>
@@ -31204,6 +31313,12 @@ value={copyTarget?.화물수량 || ""}
                     setEditTarget((p) => ({ ...p, 지급방식: e.target.value })))({ target: { value: __v } })} />
               </div>
 
+              {/* 🗓 2026-11-27 마감월(이월 오더) — 비우면 상차일의 달로 청구 */}
+              <div>
+                <label>마감월 <span className="text-[11px] text-gray-500">(이월일 때만)</span></label>
+                <input type="month" className="border p-2 rounded w-full" value={String(editTarget.마감월 || "").slice(0, 7)} onChange={(e) => setEditTarget((p) => ({ ...p, 마감월: e.target.value }))} />
+              </div>
+
               <div>
                 <label>배차방식</label>
                 <DispatchWayPicker scope={[editTarget?.거래처명, editTarget?.상차지명, editTarget?.하차지명]} placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
@@ -31357,6 +31472,7 @@ const ALLOWED_FIELDS = [
   "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
   "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", // 🏗 2026-11-09 지게차비용
   "지급방식", "배차방식", "콜구분", "콜플랫폼", // 💳 2026-11-12 IN/OUT도 같이 저장(예전엔 빠져서 수정 창에서 OUT을 골라도 IN으로 남았다)
+  "마감월", // 🗓 2026-11-27 이월 오더 마감월(오더 등록 · 수정에서 지정)
   "_owner", "_assignerSet", "배차확정자", // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기(patchDispatch가 처리)
   "메모",
   "메모중요도",
@@ -32925,6 +33041,20 @@ setConfirmChange(null);
   );
 }
 /* ===================== 메모 더보기 컴포넌트 ===================== */
+// 🏷 2026-11-27 배차완료 뒤 운임이 바뀐 오더 — 금액 옆 작은 '변경' 표시(마우스를 올리면 누가 · 언제 · 전 → 후). 전체 기록은 [변경 이력]
+function FareChangeMark({ row, k }) {
+  const m = row?.운임변경;
+  const s = k === "청구운임" ? "청구" : "기사";
+  if (!m || typeof m !== "object" || !Array.isArray(m[s])) return null;
+  const t = new Date(Number(m.at || 0) + 9 * 3600e3);
+  const when = m.at ? `${t.getUTCMonth() + 1}/${t.getUTCDate()} ${String(t.getUTCHours()).padStart(2, "0")}:${String(t.getUTCMinutes()).padStart(2, "0")}` : "";
+  const who = String(m.by || "").split("@")[0];
+  return (
+    <span data-kp="fare-change" title={`배차완료 뒤 운임 변경${when ? ` · ${when}` : ""}${who ? ` · ${who}` : ""}\n${fareChangeText(m)}`}
+      className="ml-1 inline-block align-middle px-1 rounded bg-[#FFF4E0] border border-[#F2C98A] text-[#8A5A00] text-[10px] font-black leading-[14px]">운임 변경</span>
+  );
+}
+
 function MemoMore({ text = "" }) {
   const [open, setOpen] = React.useState(false);
   const str = String(text);
@@ -33161,6 +33291,9 @@ function DispatchStatus({
   fixedForm = null,
   fixedActions = null, // ⭐ 2026-11-06 고정노선현황 오른쪽 클릭 메뉴(오더 추가·시트 열기·지금 맞추기)
 }) {
+  // 🗓 2026-11-27 마감월 일괄 지정 — 최종마감(잠금)된 달 오더는 빼고 바꾼다(경리 · 통합관리자는 그대로)
+  const carryDesk = useArDesk((getTenant() || userCompany || DEFAULT_COMPANY || "").trim());
+  const carryBypass = role === "totalMaster" || ["hrAcct", "allMgr", "acct", "accounting"].includes(role);
   // 🚚 2026-11-23 차량번호 칸 추천 기사 ▾(미배차현황 추천 기사와 같은 목록) — 고르면 배정 확인 창 → 배정
   const plateSuggestPick = useDriverSuggest(dispatchData, userCompany);
   const [plateAssignAsk, setPlateAssignAsk] = React.useState(null);
@@ -34950,7 +35083,8 @@ if (mode === "driver") {
   const BULK_COLS0 = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모", "회전", "회전방식"]; // 📥 2026-11-25 회전 · 회전방식(같은 날 같은 노선 N회 — 비우면 보통 오더)
   // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사는 양식에 "운임구분" 열(비우면 예전처럼)
   const BULK_COLS = fareOn ? [...BULK_COLS0, "운임구분"] : BULK_COLS0;
-  const downloadBulkTemplate = () => {
+  const downloadBulkTemplate = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const today = new Date(); const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const t1 = new Date(today.getTime() + 86400000);
     const samples = [
@@ -34995,6 +35129,7 @@ if (mode === "driver") {
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
@@ -35491,7 +35626,8 @@ if (first) {
     const n = Number(String(v).replace(/[^\d-]/g, ""));
     return Number.isNaN(n) ? 0 : n;
   };
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
     const _merge=(r,f1,f2)=>[..._sp(r[f1]),..._sp(r[f2])].filter(s=>s&&(s.업체명?.trim()||s.주소?.trim())).filter((s,i,a)=>{const k=s.업체명||s.주소;return a.findIndex(x=>(x.업체명||x.주소)===k)===i;});
     const _via=(list)=>list.map(s=>s.업체명||s.주소||"").filter(Boolean).join(", ");
@@ -35577,7 +35713,7 @@ if (first) {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "배차현황");
-    XLSX.writeFile(wb, "배차현황.xlsx");
+    saveWorkbook(XLSX, wb, `배차현황_${kstFileDate()}.xlsx`); // 🛠 2026-11-27 파일 이름 · 확장자가 빠지지 않게(src/xlsxSave.js)
   };
   // =====================
   // 🔑 거래처명 정규화 (정렬용)
@@ -36498,6 +36634,12 @@ return (
             />
           )}
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");{const bad=fixedForm&&(dispatchData||[]).find((x)=>selected.has(getId(x))&&!frCanEdit(x));if(bad)return frLockAlert(bad);}setShowDeletePopup(true);}}><EditableText id="status.toolbar.선택삭제" defaultText="선택삭제" /></button>
+          {/* 🗓 2026-11-27 이월 오더 일괄 지정 — 고른 오더의 마감월(청구할 달)을 익월 · 고른 달 · 비우기로 한 번에 */}
+          {!isViewer && selected.size > 0 && <button type="button" data-kp="status-carry" title="고른 오더의 마감월(청구할 달)을 한 번에 정해요(예: 10/31 상차 → 11월 청구)" className="px-2 py-1 rounded-lg bg-white border border-[#C9D6EE] text-[#1B2B4B] text-[11px] font-semibold shadow hover:bg-[#EEF3FC] whitespace-nowrap"
+            onClick={() => askCarryMonth(filtered.filter((r) => selected.has(getId(r))), {
+              isLocked: (o) => !carryBypass && isLockedOrder(o, carryDesk.closes),
+              save: (o, patch) => patchDispatch(getId(o), { ...patch, ...(o.__col ? { __col: o.__col } : {}) }, o),
+            })}>마감월 지정 ({selected.size})</button>}
           <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}><EditableText id="status.toolbar.선택초기화" defaultText="선택초기화" /></button>
           {/* 🧰 2026-11-23 툴바 정리 — [대용량 업로드](관리자 · 최고관리자만) + [엑셀다운] → [엑셀 관리] */}
           <ToolMenuButton label="엑셀 관리" testId="status-excel-menu" menuTitle="엑셀로 가져오기 · 내보내기" minWidth={250}
@@ -36904,7 +37046,7 @@ return (
                           onChange={(e) => updateEdited(row, key, e.target.value)}
                         />
                       ) : (
-                        <>{toInt(row[key]).toLocaleString()}{key === "기사운임" && <ForkliftMark row={row} />}</>
+                        <>{toInt(row[key]).toLocaleString()}{key === "기사운임" && <ForkliftMark row={row} />}<FareChangeMark row={row} k={key} /></>
                       )}
                     </td>
                   ))}
@@ -38006,6 +38148,12 @@ return (
                     setEditTarget((p) => ({ ...p, 지급방식: e.target.value })))({ target: { value: __v } })} />
               </div>
 
+              {/* 🗓 2026-11-27 마감월(이월 오더) — 비우면 상차일의 달로 청구 */}
+              <div>
+                <label>마감월 <span className="text-[11px] text-gray-500">(이월일 때만)</span></label>
+                <input type="month" className="border p-2 rounded w-full" value={String(editTarget.마감월 || "").slice(0, 7)} onChange={(e) => setEditTarget((p) => ({ ...p, 마감월: e.target.value }))} />
+              </div>
+
               <div>
                 <label>배차방식</label>
                 <DispatchWayPicker scope={[editTarget?.거래처명, editTarget?.상차지명, editTarget?.하차지명]} placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
@@ -38160,6 +38308,7 @@ return (
       "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
       "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", // 🏗 2026-11-09 지게차비용
       "지급방식", "배차방식", "콜구분", "콜플랫폼", // 💳 2026-11-12 IN/OUT도 같이 저장(예전엔 빠져서 수정 창에서 OUT을 골라도 IN으로 남았다)
+      "마감월", // 🗓 2026-11-27 이월 오더 마감월(오더 등록 · 수정에서 지정)
   "_owner", "_assignerSet", "배차확정자", // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기(patchDispatch가 처리)
       "메모",
       "메모중요도",
@@ -47550,7 +47699,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   clearSel();
 };
 
-  const downloadMonthExcel = () => {
+  const downloadMonthExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     if (!selClient) return showAlert("거래처를 선택하세요.");
     const rows = monthRows.map((row, idx) => ({
       순번: idx + 1, 청구월: row.yyyymm, 거래처명: row.거래처명,
@@ -48252,7 +48402,8 @@ const handleBatchSettle = async (targetStatus) => {
     e.target.value = "";
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
@@ -48506,6 +48657,12 @@ const handleBatchSettle = async (targetStatus) => {
     await setStmtStage(client, stmtYm, stage, { extra, sub: stmtSub });
     sflowToast(`${stmtTitle} ${Number(stmtYm.slice(5))}월 ${stageLabel(stage)}`, "success");
   };
+  // 🧾 2026-11-27 [계산서 발행 기록] — 바로 단계를 바꾸지 않고 확인창(발행일 · 승인번호)을 띄운다. 국세청 발행은 팝빌 · 홈택스에서
+  const askStmtTax = () => {
+    if (!stmtYm || isViewer) return;
+    const extra = stageIdx(stmtStage) === 0 ? { count: mapped.length, supply: 합계공급가, vat: 합계세액, excludedIds: excludedRowsInvoice.map(r => r._id), includePrepaid: invIncPrepaid } : null;
+    setStageAsk({ stage: "계산서발행", groups: [{ client, yyyymm: stmtYm, sub: stmtSub, stage: stmtStage, extra }] });
+  };
   const revertStmt = async (stage) => {
     if (!stmtYm || isViewer) return;
     if (!(await kpConfirm(`${stmtTitle} ${Number(stmtYm.slice(5))}월 명세서를 ‘${stageLabel(stage)}’ 단계로 되돌릴까요?`))) return;
@@ -48575,10 +48732,11 @@ const handleBatchSettle = async (targetStatus) => {
       sflowToast(todo.length === 1 ? `${todo[0].client} ${Number(String(todo[0].yyyymm).slice(5))}월 입금을 확인하고 마감했어요` : `입금 확인 ${todo.length}곳 마감했어요`, "success");
     })();
   }, [billRows, desk.stmts, csBizCur, isViewer, arCompany]); // eslint-disable-line react-hooks/exhaustive-deps
-  const saveStageAsk = async ({ date, note }) => {
+  const saveStageAsk = async ({ date, note, taxNo }) => {
     const t = stageAsk; if (!t) return;
     setStageAsk(null);
-    await runBulkTask({ count: t.groups.length, label: "정산", verb: `${stageLabel(t.stage)} 기록`, unitWord: "곳", task: async (progress) => { let k = 0; for (const g of t.groups) { await setStmtStage(g.client, g.yyyymm, t.stage, { date, note, sub: g.sub || "", extra: stageIdx(g.stage) === 0 ? { ...stmtSnap(g), excludedIds: [] } : null }); progress(++k); } } });
+    const taxExtra = t.stage === "계산서발행" ? { taxIssuedOn: date || todayStr8(), ...(taxNo ? { taxNo } : {}) } : null; // 🧾 2026-11-27 발행일 · 승인번호
+    await runBulkTask({ count: t.groups.length, label: "정산", verb: `${stageLabel(t.stage)} 기록`, unitWord: "곳", task: async (progress) => { let k = 0; for (const g of t.groups) { const base = g.extra !== undefined ? g.extra : (stageIdx(g.stage) === 0 ? { ...stmtSnap(g), excludedIds: [] } : null); await setStmtStage(g.client, g.yyyymm, t.stage, { date, note, sub: g.sub || "", extra: taxExtra || base ? { ...(base || {}), ...(taxExtra || {}) } : null }); progress(++k); } } });
     sflowToast(`${t.groups.length > 1 ? `${t.groups.length}곳 ` : ""}${stageLabel(t.stage)} 기록`, "success");
   };
   const pipeNav = useMemo(() => [...pipeGroups].sort((a, b) => stageIdx(a.stage) - stageIdx(b.stage) || b.total - a.total), [pipeGroups]);
@@ -48621,7 +48779,9 @@ const handleBatchSettle = async (targetStatus) => {
       const aging = {}; const openList = []; const cells = {};
       rows.forEach(r => {
         const 청구VAT = Math.round((r.총청구금액 || 0) * 1.1);
-        const open = r.정산상태 === "미정산" || r.정산상태 === "일부입금";
+        // 💰 2026-11-27 이번 달(진행중)도 받을 돈 — 예전엔 이번 달에 계산서를 낸 거래처가 목록에 안 나와 이번 달 입금을 넣을 곳이 없었고,
+        //  미수금 합계가 경리 HOME · 경영 HOME · 회계(올해 청구 전체 − 받은 돈)보다 작았다
+        const open = r.정산상태 === "미정산" || r.정산상태 === "일부입금" || (r.정산상태 === "진행중" && r.잔액 > 0);
         const od = open ? arOverDays(r.yyyymm, rule) : null;
         cells[r.yyyymm] = { st: r.정산상태, amt: open ? r.잔액 : 청구VAT, over: od };
         if (!open) return;
@@ -48948,7 +49108,7 @@ const handleBatchSettle = async (targetStatus) => {
                         <div className="flex items-center gap-2" data-kp="stmt-quick">
                           {/* 🧾 2026-11-16 미작성 [작성] → 작성 [계산서 발행] → 계산서 발행 [마감] → 마감 완료 */}
                           {stageIdx(stmtStage) === 0 && <button type="button" disabled={!rowsInvoice.length} onClick={saveStmtDraft} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-write">작성</button>}
-                          {stageIdx(stmtStage) >= 1 && stageIdx(stmtStage) < 5 && <button type="button" disabled={!rowsInvoice.length} onClick={() => quickStmt("계산서발행")} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-tax">계산서 발행</button>}
+                          {stageIdx(stmtStage) >= 1 && stageIdx(stmtStage) < 5 && <button type="button" disabled={!rowsInvoice.length} onClick={askStmtTax} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-tax" title="팝빌 · 홈택스에서 발행한 뒤 발행일 · 승인번호를 기록해요">계산서 발행 기록</button>}
                           {stageIdx(stmtStage) === 5 && <button type="button" onClick={() => quickStmt("마감")} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-close">마감</button>}
                           {stageIdx(stmtStage) === 6 && <span className="inline-flex items-center px-4 min-h-[44px] rounded-xl border border-[#0F1A30] text-[14px] font-black text-[#0F1A30]">마감 완료</span>}
                           {stageIdx(stmtStage) >= 5 && <button type="button" onClick={() => revertStmt("작성")} className={`${sdBtn} !h-full min-h-[44px]`} title="계산서 발행 · 마감을 취소하고 작성 단계로">작성으로 되돌리기</button>}
@@ -49834,6 +49994,7 @@ const handleBatchSettle = async (targetStatus) => {
                   화물명: m.화물명, 기사명: m.기사명, 차량번호: m.차량번호,
                   공급가액: m.공급가액, "세액(10%)": m.세액, 합계: m.공급가액+m.세액,
                 }));
+                const XLSX = await loadXLSX();
                 const wb2 = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(wsData), "거래명세서");
                 const excelBase64 = XLSX.write(wb2, { bookType: "xlsx", type: "base64" });
@@ -50098,6 +50259,7 @@ const handleBatchSettle = async (targetStatus) => {
                           "세액(10%)": m.세액,
                           합계: m.공급가액 + m.세액,
                         }));
+                        const XLSX = await loadXLSX();
                         const wb2 = XLSX.utils.book_new();
                         const ws2 = XLSX.utils.json_to_sheet(wsData);
                         XLSX.utils.book_append_sheet(wb2, ws2, "거래명세서");
@@ -50511,7 +50673,8 @@ const handleBatchSettle = async (targetStatus) => {
                     uploadDesc="엑셀을 고르면 매칭 결과를 먼저 보여드리고, 확인 후 정산완료·일부입금으로 반영합니다."
                     uploadTips={["입금액이 모자라면 일부입금으로", "매칭 안 된 입금은 따로 표시"]}
                     onClose={() => setBankBulkOpen(false)}
-                    onTemplate={() => {
+                    onTemplate={async () => {
+                      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
                       const ws = XLSX.utils.aoa_to_sheet([["거래일", "적요(입금자명)", "입금액", "잔액", "비고"], ["2026-10-05", "(주)예시물류", 1100000, 5100000, "9월 운송료"], ["2026-10-06", "홍길동상사", 550000, 5650000, ""]]);
                       ws["!cols"] = [{ wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
                       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "입금내역");
@@ -51207,6 +51370,7 @@ const handleBatchSettle = async (targetStatus) => {
                           청구월: r.yyyymm, 건수: r.건수,
                           총청구금액: r.총청구금액, 정산상태: r.정산상태, 정산일: r.정산일||"",
                         }));
+                        const XLSX = await loadXLSX();
                         const wb2 = XLSX.utils.book_new();
                         XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(wsData), "미수금현황");
                         fileAttachments.push({
@@ -51674,7 +51838,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [payMethodFilter, setPayMethodFilter] = useState("전체");
   const [dispatchMethodFilter, setDispatchMethodFilter] = useState("전체");
   const [loadStart, setLoadStart] = useState(() => `${thisMonthStr()}-01`);
-  const [loadEnd, setLoadEnd] = useState(todayStr9);
+  // 🛠 2026-11-27 기본 기간 = 이번 달 1일 ~ 말일(예전엔 오늘까지라 내일 · 이번 달 남은 날 상차 오더가 빠져 정산 홈 '기사 지급'과 숫자가 달랐다)
+  const [loadEnd, setLoadEnd] = useState(() => { const d = new Date(); return `${thisMonthStr()}-${String(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()).padStart(2, "0")}`; });
   useLoadOrderRange(loadStart || null, loadEnd); // ★ 고른 기간만 불러오기
   const [carNoQ, setCarNoQ] = useState("");
   const [nameQ, setNameQ] = useState("");
@@ -51682,7 +51847,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [selectedPayDate, setSelectedPayDate] = useState(todayStr9());
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [editRow, setEditRow] = useState(null); // { id, data }
-  const [searched, setSearched] = useState(false); // 조회 버튼 눌러야 결과 표시
+  // 조회 버튼 눌러야 결과 표시 — 🛠 2026-11-27 정산 홈 [기사 지급]으로 들어오면 바로 조회된 상태(src/SettleHome.jsx 가 kpPayOpenNow 를 남긴다)
+  const [searched, setSearched] = useState(() => { try { const t = Number(sessionStorage.getItem("kpPayOpenNow") || 0); sessionStorage.removeItem("kpPayOpenNow"); return Date.now() - t < 10000; } catch { return false; } });
   const [vatRate] = useState(0.1); // 부가세 10%
   const [insuranceRate, setInsuranceRate] = useState(1.27); // 산재보험료율 (%)
   const [payExcelOpen, setPayExcelOpen] = useState(false);
@@ -51731,6 +51897,13 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     });
     return set;
   }, [payDrivers]);
+  // 💸 2026-11-27 세금계산서 받는 기사(기사관리 '세금계산서 발행') — 지급완료 때 부가세 포함 이체액으로 장부에
+  const invoicePlates = useMemo(() => {
+    const set = new Set();
+    (payDrivers || []).forEach((d) => { if (d.세금계산서발행 !== true) return; const pl = normalizePlate(d.차량번호 || d.carNo || ""); if (pl && pl !== "-") set.add(pl); });
+    return set;
+  }, [payDrivers]);
+  const isInvoiceRow = (r) => invoicePlates.has(normalizePlate(r?.차량번호 || ""));
   const driversReady = Array.isArray(payDrivers); // 기사 목록이 오기 전엔 지입 차량을 가려낼 수 없어 잠깐 비워 둔다
   const base = useMemo(
     // 💳 2026-11-11 IN(우리 오더를 용차 기사가 잡은 것)만 — OUT(외부 콜을 잡은 오더)은 정산관리 › 입금 확인에서 본다(시험 기능 운송사)
@@ -51817,20 +51990,51 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   // 🔗 2026-11-01 지급완료/취소 → 수입·지출 장부(지급일별 "기사운임 지급")에 자동 반영
   // 💸 2026-11-25 장부는 오더에 남긴 지급액(지급완료 때 기사운임)으로 더하고 뺀다 — 지급 뒤 운임을 고쳐도 장부가 틀어지지 않게(src/payCore.js)
   //   row = 바꾸기 전 오더 · keepAmount = 지급일만 옮기기
-  const syncPayLedger = (row, nextStatus, nextDate, { keepAmount = false } = {}) => {
+  const syncPayLedger = (row, nextStatus, nextDate, { keepAmount = false, fundId = "" } = {}) => {
     if (!row) return;
     const wasPaid = (row.지급상태 || "지급중") === "지급완료";
     const co = companyName || row.companyName || "";
-    const plan = payLedgerPlan(row, { status: nextStatus, date: nextDate, keepAmount }, todayStr9());
-    plan.bumps.forEach((b) => bumpDriverPayout(db, { ...b, company: co }).catch(() => {}));
+    const plan = payLedgerPlan(row, { status: nextStatus, date: nextDate, keepAmount, vatRate: isInvoiceRow(row) ? PAY_VAT_RATE : 0 }, todayStr9());
+    plan.bumps.forEach((b) => bumpDriverPayout(db, { ...b, company: co, fundId }).catch(() => {}));
     if (plan.adjAmount != null && row._id) setDriverPayAdjust(db, { orderId: row._id, amount: plan.adjAmount, date: todayStr9(), company: co, who: row.이름 || "" }).catch(() => {});
     // 📩 2026-11-11 지급완료 → 기사에게 입금 안내 문자(시험 기능 · 스위치를 켠 경우만 · 같은 기사는 한 통으로 묶음)
     if (nextStatus === "지급완료" && !wasPaid && payNoticeBeta) queuePayNotice({ row, date: nextDate, company: co, patchDispatch });
   };
   // 오더에 저장할 칸(지급상태 · 지급일 · 지급액 · 지급액기록일 …) — 오더를 못 찾으면 예전처럼 상태 · 날짜만
   const payPatchOf = (row, status, date, keepAmount = false) => (row
-    ? { ...payLedgerPlan(row, { status, date, keepAmount }, todayStr9()).patch, __system: true }
+    ? { ...payLedgerPlan(row, { status, date, keepAmount, vatRate: isInvoiceRow(row) ? PAY_VAT_RATE : 0 }, todayStr9()).patch, __system: true }
     : { 지급상태: status, 지급일: date, __system: true });
+  // 💸 2026-11-27 출금 통장 — 자금관리에 '기사운임 지급' 기본 통장이 없으면 지급완료 때 고르게 한다(고른 통장은 기본 통장으로 정해 둠)
+  //  → { fundId, label } · 취소하면 null. 통장 목록을 못 읽는 계정이면 빈칸(장부에만 기록)
+  const askPayFund = async () => {
+    const info = await payFundInfo(db, companyName, "drvpay");
+    if (info.def) return { fundId: info.def.id, label: info.def.name || "기본 통장" };
+    if (!info.readable) return { fundId: "", label: "정해지지 않음(통장 잔액엔 반영 안 돼요)" };
+    if (!info.funds.length) {
+      const go = await kpConfirm("기사운임을 내보낼 통장이 아직 없어요.\n이대로 지급완료하면 장부에만 기록되고 통장 잔액은 그대로예요.\n자금관리 › 통장 설정에서 통장을 등록하고 ‘기사운임 지급’ 기본 통장으로 정해 주세요.", { title: "출금 통장 없음", okText: "통장 없이 기록", cancelText: "취소" });
+      return go ? { fundId: "", label: "없음(통장 잔액엔 반영 안 돼요)" } : null;
+    }
+    const NONE = "__none__";
+    const v = await kpChoose("기사운임을 어느 통장에서 보냈나요?\n고른 통장이 ‘기사운임 지급’ 기본 통장으로 정해져서 다음부터는 묻지 않아요(자금관리 › 통장 설정에서 바꿀 수 있어요).", [
+      ...info.funds.map((f) => ({ value: f.id, label: f.name || f.bank || "통장", sub: [f.bank, f.number ? `끝자리 ${String(f.number).slice(-4)}` : ""].filter(Boolean).join(" · ") })),
+      { value: NONE, label: "통장 없이 기록", sub: "장부에만 남고 통장 잔액은 그대로예요" },
+    ], { title: "출금 통장 고르기", okText: "이 통장으로" });
+    if (v == null) return null;
+    if (v === NONE) return { fundId: "", label: "없음(통장 잔액엔 반영 안 돼요)" };
+    const f = info.funds.find((x) => x.id === v);
+    await setPayFundDefault(db, v, "drvpay");
+    return { fundId: v, label: f?.name || "고른 통장" };
+  };
+  // 💸 2026-11-27 지급완료 확인 문구 — 이체 합계(부가세 포함 여부) · 지급일 · 출금 통장
+  const payConfirmText = (rows, date, fund) => {
+    const t = rows.reduce((a, r) => { const x = payTransferOf(r, isInvoiceRow(r)); return { supply: a.supply + x.supply, vat: a.vat + x.vat, inv: a.inv + (x.vat ? 1 : 0) }; }, { supply: 0, vat: 0, inv: 0 });
+    return [
+      `이체 합계 ${won(t.supply + t.vat)}원`,
+      t.vat ? `기사운임 ${won(t.supply)}원 + 부가세 ${won(t.vat)}원(세금계산서 받는 기사 ${t.inv}건)` : `기사운임 ${won(t.supply)}원(부가세 없음)`,
+      `지급일 ${date} · 출금 통장 ${fund.label}`,
+      "수입·지출 장부에 지출로 기록돼요.",
+    ].join("\n");
+  };
   // 지급일만 고치기(지급완료 상태 그대로)
   const changePayDate = async (row, d) => {
     if (!patchDispatch || !row || !d || d === (row.지급일 || "")) return;
@@ -51838,13 +52042,13 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     await patchDispatch(row._id, payPatchOf(row, "지급완료", d, true));
     syncPayLedger(row, "지급완료", d, { keepAmount: true });
   };
-  const pay = async (id, status) => {
+  const pay = async (id, status, fundId = "") => {
     if (!patchDispatch) return alert("저장 기능이 연결되지 않아 처리할 수 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.");
     const row = (dispatchData || []).find((r) => r._id === id);
     const date = status === "지급완료" ? (selectedPayDate || todayStr9()) : "";
     if (row && (row.지급상태 || "지급중") === status && (row.지급일 || "") === date) return; // 바뀐 게 없으면 장부도 그대로
     await patchDispatch(id, payPatchOf(row, status, date));
-    syncPayLedger(row, status, date);
+    syncPayLedger(row, status, date, { fundId });
   };
   // 💸 지급 후 운임 변경 — [추가 지급]/[환수 처리]: 차액만 조정 한 줄로(같은 오더는 한 줄 · 누적 금액이라 두 번 눌러도 같은 값)
   const settleGap = async (row) => {
@@ -51853,15 +52057,22 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     if (!plan) return;
     const who = `${row.이름 || "기사"}${row.차량번호 ? ` (${row.차량번호})` : ""}`;
     const plus = plan.gap > 0;
-    if (!(await kpConfirm(`${plus ? "추가 지급" : "환수 처리"}할까요?\n${who} · ${row.상차일 || ""}\n지급한 돈 ${won(toInt(row.기사운임) - plan.gap)}원 → 지금 기사운임 ${won(row.기사운임)}원\n${plus ? `${won(plan.gap)}원을 더 드린 것으로` : `${won(-plan.gap)}원을 돌려받은 것으로`} 장부에 남겨요.`, { title: plus ? "추가 지급" : "환수 처리", okText: "네", cancelText: "취소" }))) return;
+    const gapVat = paidVatOf(row) ? Math.round(Math.abs(plan.gap) * PAY_VAT_RATE) : 0; // 💸 2026-11-27 부가세 포함 이체한 오더면 차액도 부가세 포함
+    const gapTxt = `${won(Math.abs(plan.gap) + gapVat)}원${gapVat ? `(차액 ${won(Math.abs(plan.gap))} + 부가세 ${won(gapVat)})` : ""}`;
+    if (!(await kpConfirm(`${plus ? "추가 지급" : "환수 처리"}할까요?\n${who} · ${row.상차일 || ""}\n지급한 돈 ${won(toInt(row.기사운임) - plan.gap)}원 → 지금 기사운임 ${won(row.기사운임)}원\n${plus ? `${gapTxt}을 더 드린 것으로` : `${gapTxt}을 돌려받은 것으로`} 장부에 남겨요.\n장부 날짜 ${todayStr9()}`, { title: plus ? "추가 지급" : "환수 처리", okText: "네", cancelText: "취소" }))) return;
     await patchDispatch(row._id, { ...plan.patch, __system: true });
-    setDriverPayAdjust(db, { orderId: row._id, amount: plan.adjAmount, date: todayStr9(), company: companyName || row.companyName || "", who: row.이름 || "" }).catch(() => {});
+    setDriverPayAdjust(db, { orderId: row._id, amount: plan.adjAmount, vat: plan.adjVat, date: todayStr9(), company: companyName || row.companyName || "", who: row.이름 || "" }).catch(() => {});
   };
 
   const bulkPay = async (ids, status) => {
     if (!ids.length) return alert("처리할 건을 먼저 선택해 주세요.");
-    if (!(await kpConfirm(`${ids.length}건을 ${status === "지급완료" ? "지급완료" : status}하시겠습니까?`, { title: status, okText: "네", cancelText: "취소" }))) return;
-    await runBulkTask({ count: ids.length, label: "오더", verb: status === "지급완료" ? "지급 처리" : `${status} 처리`, task: (progress) => { let k = 0; return Promise.all(ids.map(id => pay(id, status).finally(() => progress(++k)))); } });
+    let fund = { fundId: "" };
+    if (status === "지급완료") {
+      fund = await askPayFund(); if (!fund) return;
+      const rows = ids.map((id) => (dispatchData || []).find((r) => r._id === id)).filter(Boolean);
+      if (!(await kpConfirm(`${ids.length}건을 지급완료하시겠습니까?\n${payConfirmText(rows, selectedPayDate || todayStr9(), fund)}`, { title: "지급완료", okText: "네", cancelText: "취소" }))) return;
+    } else if (!(await kpConfirm(`${ids.length}건을 ${status}하시겠습니까?`, { title: status, okText: "네", cancelText: "취소" }))) return;
+    await runBulkTask({ count: ids.length, label: "오더", verb: status === "지급완료" ? "지급 처리" : `${status} 처리`, task: (progress) => { let k = 0; return Promise.all(ids.map(id => pay(id, status, fund.fundId).finally(() => progress(++k)))); } });
     setSelectedIds(new Set());
     alert(`${ids.length}건을 ${status} 처리했습니다.`);
   };
@@ -51871,8 +52082,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     const unpaid = rows.filter(r => (r.지급상태 || "지급중") !== "지급완료");
     if (!unpaid.length) return alert("미지급 건이 없습니다.");
     const unpaidSum = unpaid.reduce((s, r) => s + toInt(r.기사운임), 0);
-    if (!(await kpConfirm(`${rows[0]?.이름 || "이 기사"}의 미지급 ${unpaid.length}건(${unpaidSum.toLocaleString()}원)을 지급완료 처리하시겠습니까?`, { title: "지급완료", okText: "지급완료", cancelText: "취소" }))) return;
-    await runBulkTask({ count: unpaid.length, label: "오더", verb: "지급 처리", task: (progress) => { let k = 0; return Promise.all(unpaid.map(r => pay(r._id, "지급완료").finally(() => progress(++k)))); } });
+    const fund = await askPayFund(); if (!fund) return;
+    if (!(await kpConfirm(`${rows[0]?.이름 || "이 기사"}의 미지급 ${unpaid.length}건(기사운임 ${unpaidSum.toLocaleString()}원)을 지급완료 처리하시겠습니까?\n${payConfirmText(unpaid, selectedPayDate || todayStr9(), fund)}`, { title: "지급완료", okText: "지급완료", cancelText: "취소" }))) return;
+    await runBulkTask({ count: unpaid.length, label: "오더", verb: "지급 처리", task: (progress) => { let k = 0; return Promise.all(unpaid.map(r => pay(r._id, "지급완료", fund.fundId).finally(() => progress(++k)))); } });
     alert(`${unpaid.length}건을 지급완료 처리했습니다.`);
   };
 
@@ -51881,7 +52093,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const toggleOne = (id) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   // ─── 엑셀 ───
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     if (!filtered.length) return alert("다운로드할 내역이 없습니다.");
     const rows = filtered.map((r, i) => ({
       순번: i + 1, 상차일: r.상차일 || "", 지급상태: r.지급상태 || "지급중", 지급일: r.지급일 || "",
@@ -51905,7 +52118,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       try {
         // cellDates 없이 원본 시리얼로 읽어야 timezone 왜곡 없음
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
@@ -52070,7 +52284,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     if (!plan.rows.length && !plan.missingDetail.length) return alert("이 기간에 지급할(미지급) 용차 운임이 없어요.");
     setTransferPlan({ period, plan });
   };
-  const downloadTransfer = (plan) => {
+  const downloadTransfer = async (plan) => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const { rows } = plan;
     const ws = XLSX.utils.json_to_sheet(rows, { header: ["은행", "계좌번호", "예금주", "금액", "받는분 통장표시", "내 통장표시", "메모"] });
     ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 40 }];
@@ -52297,10 +52512,12 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                         <button data-pay-toggle onClick={async () => {
                           // 💳 2026-11-11 화면 가운데 확인 창 — Enter · [네] = 바로 적용, Esc · [취소] = 닫기
                           const who = `${r.이름 || "기사"}${r.차량번호 ? ` (${r.차량번호})` : ""}`;
+                          const fund = isDone ? { fundId: "" } : await askPayFund(); // 💸 2026-11-27 출금 통장(기본 통장이 없으면 고르기)
+                          if (!fund) return;
                           const ok = isDone
-                            ? await kpConfirm(`지급완료를 취소하시겠습니까?\n${who} · ${won(toInt(r.기사운임) - payGapOf(r))}원 → 미지급으로 돌립니다`, { title: "지급 취소", okText: "네", cancelText: "취소", danger: true })
-                            : await kpConfirm(`지급완료하시겠습니까?\n${who} · ${r.상차일 || ""} ${r.상차지명 || ""} → ${r.하차지명 || ""}\n기사운임 ${won(r.기사운임)}원 · 지급일 ${selectedPayDate || todayStr9()}`, { title: "지급완료", okText: "네", cancelText: "취소" });
-                          if (ok) pay(r._id, isDone ? "지급중" : "지급완료");
+                            ? await kpConfirm(`지급완료를 취소하시겠습니까?\n${who} · ${won(toInt(r.기사운임) - payGapOf(r) + paidVatOf(r))}원 → 미지급으로 돌립니다`, { title: "지급 취소", okText: "네", cancelText: "취소", danger: true })
+                            : await kpConfirm(`지급완료하시겠습니까?\n${who} · ${r.상차일 || ""} ${r.상차지명 || ""} → ${r.하차지명 || ""}\n${payConfirmText([r], selectedPayDate || todayStr9(), fund)}`, { title: "지급완료", okText: "네", cancelText: "취소" });
+                          if (ok) pay(r._id, isDone ? "지급중" : "지급완료", fund.fundId);
                         }}
                           className={`px-3 py-1 rounded-lg text-[11px] font-bold text-white transition ${isDone ? "bg-[#0F1A30] hover:bg-[#1B2B4B]" : "bg-[#2D4C82] hover:bg-[#1B2B4B]"}`}>
                           {isDone ? "✓ 지급완료" : "미지급"}
@@ -52671,6 +52888,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   // 🪪 2026-11-20 [정산정보 가져오기] — 선정산 파일(여러 개)에서 차량번호로 기사를 찾아 사업자번호 · 계좌만 채운다
   const [payInfoImport, setPayInfoImport] = React.useState(null); // { fileNames, items }
   const onPayInfoFiles = async (e) => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const files = [...(e.target.files || [])];
     e.target.value = "";
     if (!files.length) return;
@@ -52691,7 +52909,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     setPayInfoImport({ fileNames: names, items });
   };
   // 기사관리에 없는 차량 → 대용량 업로드 양식 열 그대로(+ 정산 정보) 엑셀
-  const downloadMissingPayInfo = (its) => {
+  const downloadMissingPayInfo = async (its) => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const rows = its.map((it) => ({ 차량번호: it.plate, 이름: it.ceo || "", 전화번호: it.phone || "", 등급: "일반", 메모: it.company || "",
       사업자번호: it.bizNo ? fmtBizNo(it.bizNo) : "", 상호: it.company || "", 대표자: it.ceo || "", 은행: it.bank || "", 계좌번호: it.acct || "", 예금주: it.holder || "" }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -52907,7 +53126,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     showAlert("삭제 완료");
   };
 
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     if (!filtered.length) return showAlert("내보낼 데이터가 없습니다.");
     const rows = filtered.map((r,i) => ({
       순번:i+1, 차량번호:r.차량번호||"", 이름:r.이름||"",
@@ -52925,6 +53145,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       try {
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type:"array" });
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval:"" });
@@ -53073,7 +53294,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               uploadDesc="작성한 양식을 고르면 등록할 건수를 먼저 보여드리고, 확인 후 반영합니다."
               uploadTips={["이미 있는 차량번호는 내용만 갱신", "기사앱 가입 차량도 같은 기사로 합쳐짐"]}
               onClose={() => setDriverBulkOpen(false)}
-              onTemplate={() => downloadTemplateXlsx(XLSX, "기사관리_양식.xlsx", "기사관리", ["차량번호", "이름", "전화번호", "등급", "메모"],
+              onTemplate={async () => downloadTemplateXlsx(await loadXLSX(), "기사관리_양식.xlsx", "기사관리", ["차량번호", "이름", "전화번호", "등급", "메모"],
                 [["경기12가3456", "김기사", "010-1234-5678", "일반", ""], ["서울34나5678", "이기사", "010-9876-5432", "지입", "평일만 가능"]],
                 [["예시 2줄", "예시 줄은 지우고 기사를 한 줄에 한 명씩 입력하세요."], ["차량번호", "필수. 띄어쓰기는 자동으로 지웁니다."], ["등급", "일반 / 직영 / 지입 / 블랙 중 하나 (비우면 일반)"], ["이미 등록된 기사", "같은 차량번호가 있으면 새로 만들지 않고 내용만 고칩니다."]])}
               onFile={(e) => { setDriverBulkOpen(false); onExcel(e); }}
@@ -54651,7 +54872,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       uploadDesc="작성한 양식을 고르면 등록할 건수를 먼저 보여드리고, 확인 후 반영합니다."
       uploadTips={["빈 줄은 자동으로 건너뜀", "일반메모·오더메모도 함께 저장"]}
       onClose={() => setClientBulkKind(null)}
-      onTemplate={() => downloadTemplateXlsx(XLSX, "기본거래처_양식.xlsx", "거래처", ["거래처명", "사업자번호", "대표자", "업태", "종목", "주소", "담당자", "연락처", "이메일", "일반메모", "오더메모"],
+      onTemplate={async () => downloadTemplateXlsx(await loadXLSX(), "기본거래처_양식.xlsx", "거래처", ["거래처명", "사업자번호", "대표자", "업태", "종목", "주소", "담당자", "연락처", "이메일", "일반메모", "오더메모"],
         [["동원F&B", "123-45-67890", "홍길동", "제조", "식품", "서울 서초구 마방로 68", "김대리", "02-1234-5678", "kim@example.com", "", "파레트 회수 필수"]],
         [["예시 1줄", "예시 줄은 지우고 거래처를 한 줄에 하나씩 입력하세요."], ["거래처명", "필수. 같은 이름이 이미 있으면 새로 만들지 않고 내용만 고칩니다."], ["일반메모 / 오더메모", "오더메모는 오더 등록 시 함께 보이는 메모입니다."]])}
       onFile={(e) => { setClientBulkKind(null); onExcel(e); }}
@@ -54664,7 +54885,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       uploadDesc="작성한 양식을 고르면 새로 등록될 건수를 먼저 보여드리고, 확인 후 반영합니다."
       uploadTips={["빈 줄·주소 없는 줄은 건너뜀", "주소는 도로명/지번 모두 가능"]}
       onClose={() => setClientBulkKind(null)}
-      onTemplate={() => downloadTemplateXlsx(XLSX, "상하차지거래처_양식.xlsx", "상하차지", ["업체명", "주소", "담당자", "담당자번호", "메모"],
+      onTemplate={async () => downloadTemplateXlsx(await loadXLSX(), "상하차지거래처_양식.xlsx", "상하차지", ["업체명", "주소", "담당자", "담당자번호", "메모"],
         [["CJ 대구센터", "대구 달서구 성서로 10", "박과장", "010-2222-3333", "하차 09시 이후"], ["이마트 광주센터", "광주 광산구 하남산단 5", "", "", ""]],
         [["예시 2줄", "예시 줄은 지우고 상하차지를 한 줄에 하나씩 입력하세요."], ["업체명 · 주소", "필수. 주소가 없으면 그 줄은 건너뜁니다."], ["중복", "이미 같은 주소로 등록된 상하차지는 건너뜁니다."]])}
       onFile={(e) => { setClientBulkKind(null); onExcelPlaces(e); }}
@@ -54675,6 +54896,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       try {
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
@@ -54712,7 +54934,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     reader.readAsArrayBuffer(file);
   };
 
-  const downloadClientExcel = () => {
+  const downloadClientExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const data = filtered.length > 0 ? filtered : rows;
     if (!data.length) return showAlert("다운로드할 데이터가 없습니다.");
     const ws = XLSX.utils.json_to_sheet(data.map(r => ({
@@ -54964,6 +55187,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       try {
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
@@ -55017,7 +55241,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     showAlert(`${up.ok}곳을 정리했습니다.${up.fail ? `\n실패 ${up.fail}곳` : ""}`);
   };
 
-  const downloadPlaceExcel = () => {
+  const downloadPlaceExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const data = filteredPlaces.length > 0 ? filteredPlaces : placeRows;
     if (!data.length) return showAlert("다운로드할 데이터가 없습니다.");
     const ws = XLSX.utils.json_to_sheet(data.map(r => ({
@@ -57004,7 +57229,7 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
       )}
       {tab === "조직도" && <OrgChart userCompany={userCompany} />}
       {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
-      {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
+      {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={canEditFareRules(role, myDocCM?.isMaster === true)} myName={myDocCM?.name || myName} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
         <MyProfilePage
@@ -57154,6 +57379,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   const [activeTab, setActiveTab] = React.useState(view || "이력서");
   React.useEffect(() => { if (view) { setActiveTab(view); setDraft(null); setEditMode(false); } }, [view]);
   const [teamFilter, setTeamFilter] = React.useState("전체");
+  const [showLeftHr, setShowLeftHr] = React.useState(false); // 🛠 2026-11-27 퇴사자는 맨 아래 '퇴사자' 묶음 — 눌러야 보인다
   const [search, setSearch] = React.useState("");
   // 🚛 2026-11-15 인사발령 — 소속 기사(지입 · 직영 · 임대)도 발령할 수 있게(지입관리 › [인사발령 작성]에서 오면 그 기사를 골라 둔다)
   const [hrWho, setHrWho] = React.useState(() => { try { return sessionStorage.getItem("kpHrDriverFocus") ? "driver" : "staff"; } catch { return "staff"; } });
@@ -57274,8 +57500,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
 
   const grouped = React.useMemo(() => {
     const g = {};
-    filteredRows.forEach(r => {
-      const key = r.team || "미배정";
+    // 🛠 2026-11-27 퇴사자는 재직자와 섞지 않고 맨 아래 '퇴사자' 묶음으로(예전엔 같은 부서 목록에 퇴사 표시 없이 섞였다)
+    [...filteredRows.filter((r) => r.employmentStatus !== "퇴사"), ...filteredRows.filter((r) => r.employmentStatus === "퇴사")].forEach(r => {
+      const key = r.employmentStatus === "퇴사" ? "퇴사자" : r.team || "미배정";
       if (!g[key]) g[key] = [];
       g[key].push(r);
     });
@@ -57283,7 +57510,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   }, [filteredRows]);
 
   React.useEffect(() => {
-    if (!selectedUid && rows.length) setSelectedUid(rows[0].uid);
+    if (!selectedUid && rows.length) setSelectedUid((rows.find((r) => r.employmentStatus !== "퇴사") || rows[0]).uid); // 처음엔 재직자부터
   }, [rows, selectedUid]);
   // 직원 등록 직후 → 그 사람 이력서로
   React.useEffect(() => { if (focusUid && rows.some((r) => r.uid === focusUid)) setSelectedUid(focusUid); }, [focusUid, rows.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -57484,11 +57711,17 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
           {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[13px] text-[#9AA9C3]">인원이 없습니다</div>}
           {Object.entries(grouped).map(([team, members2]) => (
             <div key={team} className="mb-2">
+              {team === "퇴사자" ? (
+                <button type="button" onClick={() => setShowLeftHr((v) => !v)} className="w-full px-2 pt-2 pb-1 flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">퇴사자 {showLeftHr ? "▴" : "▾ 눌러서 보기"}</span>
+                  <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums">{members2.length}명</span>
+                </button>
+              ) : (
               <div className="px-2 pt-2 pb-1 flex items-center justify-between">
                 <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">{team}</span>
                 <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums">{members2.length}명</span>
-              </div>
-              {members2.map(r => {
+              </div>)}
+              {(team !== "퇴사자" || showLeftHr || members2.some((r) => r.uid === selectedUid)) && members2.map(r => {
                 const photo = resumes[r.uid]?.photoUrl;
                 const on = selectedUid === r.uid;
                 return (
@@ -57499,7 +57732,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       {photo ? <img src={photo} className="w-full h-full object-cover" /> : (r.name || "?").slice(0, 1)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.name || r.email}{resumes[r.uid]?.hrSeen === false && canManage && <span className="ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded bg-[#D92D20] text-white">NEW</span>}</div>
+                      <div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.name || r.email}{r.employmentStatus === "퇴사" && <span className={`ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded ${on ? "bg-white/20 text-white" : "bg-[#F2F4F7] text-[#5B6B85]"}`}>퇴사</span>}{resumes[r.uid]?.hrSeen === false && canManage && <span className="ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded bg-[#D92D20] text-white">NEW</span>}</div>
                       <div className={`text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{r.position || "직책 미설정"}</div>
                     </div>
                     {r.pendingApprovals > 0 && <span className={`shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[10.5px] font-extrabold flex items-center justify-center ${on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`} title="결재 대기">{r.pendingApprovals}</span>}
@@ -57735,6 +57968,12 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                     )}
                   </div>
                   )}
+                </div>
+              ) : activeTab === "인사발령" && canManage && selected.employmentStatus === "퇴사" ? (
+                // 🛠 2026-11-27 퇴사자에게는 발령 공문을 내지 않는다(예전엔 [발령 공문 발송]이 그대로 열려 공지 · 전 직원 메일이 나갈 수 있었다)
+                <div className="rounded-2xl border border-[#E3E8F0] bg-[#F8FAFD] px-5 py-10 text-center">
+                  <div className="text-[15px] font-black text-[#0F1A30]">퇴사한 직원이에요</div>
+                  <div className="text-[13px] text-[#5B6B85] mt-1.5 leading-relaxed">퇴사자에게는 인사발령 공문을 보낼 수 없어요.<br />다시 입사했다면 직원관리에서 재직으로 바꾼 뒤 발령하면 돼요.</div>
                 </div>
               ) : activeTab === "인사발령" && canManage ? (
                 <PersonnelOrder company={company} target={selected} isSelf={selected.uid === userId}
@@ -58900,10 +59139,12 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
     const clean = {}; Object.entries(patch || {}).forEach(([k, v]) => { if (!k.startsWith("__")) clean[k] = v; });
     if (("청구운임" in clean || "기사운임" in clean) && !("수수료" in clean)) clean.수수료 = String(nextFee(row || null, { ...(row || {}), ...clean }));
     if (!("지급상태" in clean) || clean.지급상태 === row?.지급상태) { // 💸 2026-11-25 PC와 같은 규칙 — 지급한 오더의 기사운임 변경 · 취소는 한 번 묻고 지급액 고정(src/payCore.js)
+      if (!patch?.__system && paidFareLocked(role, mBypass, row, clean)) { window.alert(PAID_FARE_LOCK_MSG); return false; } // 🔒 2026-11-27 PC와 같은 규칙
       const _pg = paidEditGuard(row, clean, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
       if (_pg.warn && !patch?.__system && !window.confirm(_pg.warn)) return false;
       Object.assign(clean, _pg.extra);
     }
+    if (!patch?.__system) { const fc = fareChangeMark(row, clean, { by: auth.currentUser?.email || "" }); if (fc) clean.운임변경 = fc.clear ? null : fc; } // 🏷 2026-11-27 PC와 같은 '운임 변경' 표시
     const col = patch?.__col || row?.__col || "dispatch";
     await updateDoc(doc(db, col, _id), { ...clean, updatedAt: serverTimestamp() });
     const MIRROR = ["청구운임", "지급방식", "차량번호", "이름", "전화번호", "상차일", "하차일", "화물내용"];

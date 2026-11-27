@@ -40,6 +40,7 @@ import AttendanceBoard from "../AttendanceBoard";
 import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
 import FareRulesSettings from "../FareRulesSettings"; // ⭐ 2026-11-02 운임규칙
+import { canEditFareRules } from "../fareRules"; // 🔒 2026-11-27 운임 규칙 편집은 운송 · 경리 관리자만
 import RouteSpecialPresets from "../RouteSpecialPresets"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import { AcctMenuGate } from "../PayrollGate"; // ⭐ 2026-11-18 회계관리 · 자금관리 메뉴 잠금
 import BoardPage, { BOARDS, canSeeBoard } from "../BoardPosts"; // ⭐ 2026-11-03 모바일 게시판
@@ -312,7 +313,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
       renderAttendance={() => <AttendanceBoard userCompany={userCompany} role={role} user={me} />} /></div>;
     else if (k === "cashbook") body = <div className="kp-m-pc"><AcctMenuGate company={userCompany} menuLabel="자금관리"><FundsWorkspace company={userCompany} isViewer={isViewer} /></AcctMenuGate></div>;
     else if (k === "myresume") body = <div className="kp-m-pc"><React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} selfOnly /></React.Suspense></div>;
-    else if (k === "farerules") body = wrap(<FareRulesSettings company={userCompany} mobile canEdit={role !== "viewer"} myName={me?.name || ""} />); // ⭐ 2026-11-02 운임규칙
+    else if (k === "farerules") body = wrap(<FareRulesSettings company={userCompany} mobile canEdit={canEditFareRules(role, me?.isMaster === true || prof?.isMaster === true)} myName={me?.name || ""} />); // ⭐ 2026-11-02 운임규칙
     else if (k === "routefare") body = wrap(<RouteSpecialPresets mobile canEdit={role !== "viewer"} canAdmin={["admin", "allMgr", "test", "totalMaster"].includes(role) || me?.isMaster === true} />); // ⭐ 2026-11-17 노선별 고정 특수운임
     else if (k === "board") body = <MobileBoard company={userCompany} me={{ ...(me || {}), role }} />;
     else if (k === "safety") body = wrap(<SafetyEduMine user={{ uid: me?.uid, name: me?.name || me?.displayName || "", companyName: userCompany, role: me?.role === "totalMaster" ? "totalMaster" : "staff" }} audience="staff" title="" showDriver board={eduBoardRole(role, me?.team) || deptMode === "hr" ? { company: userCompany, canManage: role !== "viewer" } : null} />);

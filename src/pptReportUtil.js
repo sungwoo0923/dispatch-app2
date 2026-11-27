@@ -8,7 +8,7 @@
 // { templateId, companyName, monthA, monthB, insight, comments, author } 데이터만
 // 받아서 pptx를 만들기 때문에, Node에서도 동일한 함수로 목업 데이터를 넣어 그대로
 // 테스트/QA할 수 있다 (실제 앱 코드와 완전히 같은 생성 로직으로 검증됨).
-import pptxgen from "pptxgenjs";
+// ⚡ 2026-11-27 속도 — pptxgenjs(약 400KB)는 [PPT 저장]을 누를 때 받는다(예전엔 배차 프로그램 첫 묶음에 같이 들어 로그인 뒤 HOME이 늦게 떴다)
 
 // ⭐ 템플릿 종류 — 색상/톤만 다르고 슬라이드 구성은 동일하다. "네이비 클래식"은
 // 프로그램 자체 브랜드 컬러(#1B2B4B)와 동일해 프로그램 화면과 톤을 맞춘 기본값이다.
@@ -118,6 +118,7 @@ export async function generateMonthlyReportPPT({
   if (!insight) throw new Error("insight 데이터가 필요합니다.");
   const { A, B, topGrowth = [], topDecline = [], report = [] } = insight;
 
+  const { default: pptxgen } = await import("pptxgenjs");
   const pres = new pptxgen();
   pres.layout = "LAYOUT_WIDE"; // 13.3" x 7.5"
 

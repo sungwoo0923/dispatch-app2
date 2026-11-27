@@ -700,7 +700,8 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
   const cols = [{ uid: drafter?.uid, name: drafter?.name, position: drafter?.position || "기안", kind: "기안", status: "approved", at: createdMs }, ...(line || [])];
   // legacy 칸(예전 양식의 칸)은 값이 있는 예전 문서에서만, legacyOf 칸은 예전 칸에 값이 있고 자기 값이 비었으면 숨김
   const has = (k) => { const x = data?.[k]; return x !== undefined && x !== null && String(x).trim() !== ""; };
-  const fields = (form.fields || []).filter((f) => (f.legacy ? has(f.k) : !(f.legacyOf && has(f.legacyOf) && !has(f.k))));
+  // 🛠 2026-11-27 '제목' 칸이 문서 제목과 같으면 한 번만(예전엔 제목 행이 두 번 나왔다)
+  const fields = (form.fields || []).filter((f) => (f.legacy ? has(f.k) : !(f.legacyOf && has(f.legacyOf) && !has(f.k)))).filter((f) => !(f.k === "subject" && String(data?.subject || "").trim() && String(data.subject).trim() === String(title || "").trim()));
   const c = React.useContext(PaperCompact);
   const lw = c ? "w-[84px] px-2.5 text-[13px]" : "w-[118px] px-3 text-[14px]";
   const lw2 = c ? "w-[84px] px-2.5 text-[13px]" : "w-[96px] px-3 text-[14px]";
@@ -1708,7 +1709,9 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const setField = (f, v) => setData((p) => { const n = { ...p, [f.k]: v }; const extra = form.autofill ? form.autofill(f.k, v, p, { staff }) : null; return extra ? { ...n, ...extra } : n; });
   const docName = String(form.title || form.label).replace(/\s+/g, "").replace(/·/g, "·");
   const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position ? ` ${me.position}` : ""}`; // ⭐ 2026-11-02 이름·직책 사이 띄어쓰기
-  const finalTitle = (title || autoTitle || form.label).trim();
+  // 🛠 2026-11-27 문서 제목을 비우면 양식의 '제목' 칸 내용으로(기안서 등) — 예전엔 '날짜 기안서_이름'만 목록 · 확인창에 보여 무슨 건인지 몰랐다
+  const subjectTitle = String(data?.subject || "").trim();
+  const finalTitle = (title || subjectTitle || autoTitle || form.label).trim();
 
   const submit = async () => {
     const miss = missingFields(form, data);
@@ -1754,6 +1757,9 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       } catch (e) { setMsg(e.message || "수정 실패"); } finally { setBusy(false); }
       return;
     }
+    // 🛠 2026-11-27 입사일이 없으면 잔여 연차를 셀 수 없다(잔여 '-') — 모르고 올리지 않게 한 번 묻는다
+    if (leaveUseOf({ cat, form: form.key, data: pd }) && leave && !leave.loading && !leave.ent && !leave.hireDate
+      && !await kpConfirm("입사일이 등록되지 않아 잔여 연차를 확인할 수 없어요.\n잔여 연차보다 많이 쓰는지 알 수 없으니, 인사 담당자에게 입사일 등록을 먼저 요청하는 게 좋아요.\n\n그래도 상신할까요?")) return;
     if (!await kpConfirm(`「${finalTitle}」 문서를 ${line.map((s) => s.name).join(" → ")} 순서로 결재 상신할까요?`)) return;
     setBusy(true); setMsg("");
     try {
@@ -1826,8 +1832,8 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
           <label className="block"><span className="text-[14.5px] font-black text-[#3A4A66]">양식</span>
             <CustomSelect openOnFocus value={formKey} disabled={!!editId} onChange={(e) => pickForm(e.target.value)} className={`${inp} !h-11 font-black disabled:bg-[#F5F7FA]`}>{forms.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</CustomSelect>
           </label>
-          <label className="block"><span className="text-[14.5px] font-black text-[#3A4A66]">문서 제목 <span className="font-semibold text-[#5B6B85]">(비우면 자동 · {autoTitle})</span></span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={autoTitle} className={inp} />
+          <label className="block"><span className="text-[14.5px] font-black text-[#3A4A66]">문서 제목 <span className="font-semibold text-[#5B6B85]">(비우면 {form.fields?.some((f) => f.k === "subject") ? `아래 '제목' 칸 내용${subjectTitle ? ` · ${subjectTitle}` : ""}` : `자동 · ${autoTitle}`})</span></span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={subjectTitle || autoTitle} className={inp} />
           </label>
           <div className="grid grid-cols-2 gap-x-2.5 gap-y-3">
             {form.fields.filter((f) => !f.legacy).map((f) => {
@@ -2738,7 +2744,8 @@ function AutoApproveCard({ company, me, todo = [] }) {
           className={`h-10 pl-2 pr-4 rounded-xl inline-flex items-center gap-2 text-[13.5px] font-black border transition ${active ? "text-[#1A1405] border-[#D7BC82]" : "bg-white text-[#0F1A30] border-[#DCE3EE] hover:bg-[#F5F8FD]"}`}
           style={active ? { background: "linear-gradient(180deg,#FFF6E2,#F6E7C4)" } : undefined}>
           <span className={`h-7 px-1.5 rounded-lg grid place-items-center text-[10.5px] font-black ${active ? "text-[#1A1405]" : "bg-[#EEF3FC] text-[#1B2B4B]"}`} style={active ? { background: "linear-gradient(180deg,#F1DFB4,#D7BC82)" } : undefined}>AUTO</span>
-          자동 승인
+          {/* 🛠 2026-11-27 HOME '일일 업무일지 자동 승인(회사)'과 헷갈리지 않게 — 이건 내 결재 차례 자동 승인(개인 · 부재 · 위임) */}
+          내 결재 자동 승인
           <span className={`h-5 px-1.5 rounded-full text-[11px] font-black grid place-items-center ${active ? "bg-[#B88A2E] text-white" : "bg-[#F1F4F9] text-[#9AA9C3]"}`}>{active ? "켜짐" : "꺼짐"}</span>
         </button>
       </div>
@@ -2877,7 +2884,8 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const isHidden = (d) => (d.hiddenBy || []).includes(uid);
   const L = (list || []).filter((d) => !isHidden(d));
   const hiddenL = (list || []).filter(isHidden);
-  const inLine = (d) => (d.line || []).some((s) => s.uid === uid);
+  // 🛠 2026-11-27 결재함 '내 결재 문서' = 내가 올렸거나 결재 · 참조로 받은 문서(안내 문구 그대로) — 예전엔 결재선에 있는 문서만 걸러 내가 올린 문서가 안 보였다
+  const inLine = (d) => d.drafterUid === uid || (d.line || []).some((s) => s.uid === uid) || (d.ccUids || []).includes(uid);
   // ⭐ 2026-11-09 결재함 필터 — 회사 전체(관리자)/전체 · 결재 대기(내 차례) · 지급 대기 · 지급완료 · 반려 · 결재 취소 · 회수 · 참조 · 삭제한 문서
   rememberAccounts(list); rememberAccounts(companyAll); rememberAccounts(payPool);
   const lineL0 = L.filter(inLine);

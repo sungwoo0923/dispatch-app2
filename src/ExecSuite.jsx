@@ -41,7 +41,7 @@ import { EX, EX_NUM, EX_FONT, GOLD_GRAD, GoldRule, ExecPage, ExecPanel, ExecKpis
 import { monthPipeline, laborByMonth, teamComposition, teamContribution, attendanceToday, briefSentences, TEAM_NONE } from "./execBriefingCore";
 import { liveRows, monthsBack } from "./execAnalyticsCore";
 import { staffRanking, monthSpans } from "./dailyReportCore";
-import { receivablesOf } from "./arAging";
+import { arSummaryOf } from "./arLive"; // 💰 2026-11-27 미수금 한 숫자
 import { useUserNameMap, orderStaffNameRaw, ORDER_MGR_FIXED } from "./detailGetters";
 import { useCompanyRows } from "./companyColStore";
 import { useArPaid } from "./arPaidLive"; // 🔗 2026-11-25 미수금 받은 돈 — 회계 · 정산 화면과 같은 식
@@ -327,7 +327,10 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const autoDaily = apSet.autoApproveDaily === true;
   const fundsLive = useFundsSummary(company, isCeo && !demo);
   const F = React.useMemo(() => (demo ? { ready: true, has: true, ...computeFunds(demo.funds, demo.ledger) } : fundsLive), [demo, fundsLive]);
-  const apLive = useApprovalsOf(co);
+  // 🛠 2026-11-27 결재 문서를 받기 전(null)에는 '0건' 대신 불러오는 중으로 보인다 — 예전엔 첫 화면에 '전사 진행 중 0건'이 확정값처럼 떴다
+  const apRawLive = useCompanyQuery("approvals", co, "company");
+  const apLive = apRawLive || [];
+  const apLoading = !demo && !!co && apRawLive == null;
   const approvals = demo ? demo.approvals : apLive;
   const staffLive = useStaff(co);
   const staff = React.useMemo(() => (demo ? demo.people.filter((p) => p.employmentStatus !== "퇴사").map((p) => ({ ...p, id: p.uid })) : staffLive.staff), [demo, staffLive.staff]);
@@ -360,10 +363,13 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const dayNo = Number(today.slice(8, 10));
   const dim = new Date(Date.UTC(Number(thisMonth.slice(0, 4)), Number(thisMonth.slice(5, 7)), 0)).getUTCDate();
   // 🗓 2026-11-25 달 · 연 합계: 매출 · 이익 = 청구일(bill · 청구월 기준), 건수 = 상차일(days)
-  const sumWhere = (fn) => { const b = Object.entries(bill).reduce((a, [d, v]) => (fn(d) ? [a[0] + v[0], a[1] + v[1]] : a), [0, 0]); const c = Object.entries(days).reduce((a, [d, v]) => (fn(d) ? a + v[2] : a), 0); return [b[0], b[1], c]; };
-  const [mSale, mProfit, mCnt] = sumWhere((d) => d.startsWith(thisMonth));
+  //  📏 2026-11-27 운송 HOME(HomeDeck)과 같은 범위 — 매출 · 이익은 이번 달 말일까지의 청구일, 건수는 오늘까지의 상차일
+  //   (예전엔 올해 누적에 12월 청구분이 들어가 운송 HOME보다 187만원 많았고, 건수에 내일 이후 상차 오더가 섞였다)
+  const sumWhere = (fn, cntFn = fn) => { const b = Object.entries(bill).reduce((a, [d, v]) => (fn(d) ? [a[0] + v[0], a[1] + v[1]] : a), [0, 0]); const c = Object.entries(days).reduce((a, [d, v]) => (cntFn(d) ? a + v[2] : a), 0); return [b[0], b[1], c]; };
+  const monthEndKey = `${thisMonth}-${String(dim).padStart(2, "0")}`;
+  const [mSale, mProfit, mCnt] = sumWhere((d) => d.startsWith(thisMonth), (d) => d.startsWith(thisMonth) && d <= today);
   const [pSale, pProfit] = sumWhere((d) => d.startsWith(prevMonth) && Number(d.slice(8, 10)) <= dayNo);
-  const [ySale, yProfit, yCnt] = sumWhere((d) => d.startsWith(year));
+  const [ySale, yProfit, yCnt] = sumWhere((d) => d.startsWith(year) && d <= monthEndKey, (d) => d.startsWith(year) && d <= today);
   const prevAvail = prevMonth.slice(0, 4) === year;
   const mMargin = mSale ? (mProfit / mSale) * 100 : null;
   const pMargin = pSale ? (pProfit / pSale) * 100 : null;
@@ -392,10 +398,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   // ── 미수금(회계관리 · 경영 분석과 같은 계산 — 올해 배차완료 + 고정거래처, 부가세 포함 − 수금 기록) ──
   const ar = React.useMemo(() => {
     if (!arPay || !yearLoaded) return null;
-    const list = receivablesOf({ orders: rows, fixedRows: demo ? [] : fixedLive || [], paid: arPay, today }).filter((x) => x.outstanding > 0);
-    const total = list.reduce((s, x) => s + x.outstanding, 0);
-    const over30 = list.reduce((s, x) => s + (x.aging?.b60 || 0) + (x.aging?.b90 || 0) + (x.aging?.over || 0), 0);
-    return { total, over30, clients: list.length };
+    // 💰 2026-11-27 경리 HOME · 정산 홈 · 미수금관리와 같은 함수(src/arLive.js arSummaryOf)
+    return arSummaryOf({ orders: rows, fixedRows: demo ? [] : fixedLive || [], paid: arPay, today });
   }, [arPay, yearLoaded, rows, fixedLive, demo, today]);
 
   // ── 결재 ──
@@ -425,7 +429,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const nameMap = useUserNameMap();
   const staffOf = React.useCallback((r) => { const n = orderStaffNameRaw(r, nameMap); return (n && n !== ORDER_MGR_FIXED ? n : "") || String(r?.배차확정자 || "").trim() || n || "미지정"; }, [nameMap]);
   const teamByName = React.useMemo(() => { const m = {}; staff.forEach((u) => { const n = String(personName(u) || u.name || "").trim(); if (n) m[n] = String(u.team || "").trim(); }); return m; }, [staff]);
-  const rank = React.useMemo(() => { const sp = monthSpans(today); return staffRanking(rows, sp.cur, sp.prev, staffOf, (n) => n === "최고관리자", true); /* 🗓 청구월 기준 */ }, [rows, today, staffOf]);
+  // 📏 2026-11-27 이번 달 = 1일 ~ 말일 청구분(이번 달 매출 타일 · 사업 흐름과 같은 범위). 예전엔 1일 ~ 오늘이라 '회사 전체'가 452만 vs 사업 흐름 499만으로 달랐다
+  const rank = React.useMemo(() => { const sp = monthSpans(today); const cur = [...sp.cur]; for (let d = addDay(today, 1); d.startsWith(thisMonth); d = addDay(d, 1)) cur.push(d); return staffRanking(rows, cur, sp.prev, staffOf, (n) => n === "최고관리자", true); /* 🗓 청구월 기준 */ }, [rows, today, thisMonth, staffOf]);
   const teamRows = React.useMemo(() => teamContribution(rank.list, (n) => teamByName[n] || ""), [rank, teamByName]);
 
   // ── 거래처 ──
@@ -495,12 +500,14 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           <BTile en="FORECAST" label="월말 예상 매출" money={forecast} foot={prevAvail ? `전월 실적 ${fmtMoney(pFullSale)}` : undefined} delta={prevAvail && pFullSale ? pctChange(forecast, pFullSale) : undefined} deltaLabel="전월 대비"
             side={<Ring value={(dayNo / dim) * 100} size={52} stroke={4.5} label={`${dayNo}/${dim}`} sub="일" />} title="이번 달 경과일 비율 · 현 추세 기준(일평균 매출 × 이번 달 일수)" />
           {isCeo && (F.has
-            ? <BTile en="TREASURY" label="보유 자금" money={F.cash} onClick={() => onGo?.("자금현황")} foot={F.runway != null ? `운영 가능 기간 ${F.runway.toFixed(1)}개월` : "자금현황 ›"}
+            ? <BTile en="TREASURY" label="보유 자금" money={F.cash} onClick={() => onGo?.("자금현황")} foot={/* 📏 2026-11-27 잔액 맞춘 날이 30일 넘게 지났거나 통장 없이 적힌 장부가 있으면 먼저 알려 준다 */ F.baseDate && F.baseDate < addDay(today, -30) ? `잔액 확인 필요 · ${Number(F.baseDate.slice(5, 7))}/${Number(F.baseDate.slice(8, 10))} 기준${F.unlinked ? ` · 통장 미지정 ${F.unlinked}건` : ""}` : F.unlinked ? `통장 미지정 장부 ${F.unlinked}건 — 자금관리에서 통장을 골라 주세요` : F.runway != null ? `운영 가능 기간 ${F.runway.toFixed(1)}개월` : "자금현황 ›"}
               delta={undefined} title="예금 · 현금 잔액(경리 입력 기준): 선택하면 자금현황으로 이동합니다" />
             : <BTile en="TREASURY" label="보유 자금" muted value={F.ready ? "자금관리 입력 전" : "불러오는 중…"} foot="경리 담당자가 예금 잔액을 입력하면 표시됩니다" onClick={() => onGo?.("자금현황")} />)}
           {ar ? <BTile en="RECEIVABLES" label="미수금" money={ar.total} foot={ar.over30 > 0 ? <span style={{ color: EX.warn }}>30일 초과 {fmtMoney(ar.over30)}</span> : `${ar.clients}곳 · 부가세 포함`} onClick={() => onGo?.("경영분석")} title="올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금액" />
             : <BTile en="RECEIVABLES" label="미수금" muted value="집계 중…" foot="올해 청구 · 수금 내역을 불러오고 있습니다" />}
-          <BTile en="YEAR TO DATE" label="올해 누적 매출" money={ySale} foot={<>매출총이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
+          {/* 🛠 2026-11-27 지난 달들 집계(ready)가 끝나기 전엔 '집계 중…' — 예전엔 최근 오더만 더한 값(710만)이 확정값처럼 먼저 떴다 */}
+          {ready ? <BTile en="YEAR TO DATE" label="올해 누적 매출" money={ySale} foot={<>매출총이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
+            : <BTile en="YEAR TO DATE" label="올해 누적 매출" muted value="집계 중…" foot="지난 달 오더까지 모아 계산하고 있습니다" />}
         </ExecKpis>
         {/* ⭐ 2026-11-07 규칙 점검 — 매출관리(배차완료만)와 숫자가 다른 이유를 화면에 적어 둔다 */}
         <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 배차완료 오더 + 고정거래처(매출관리와 같음 · 배차중 · 미배차 · 취소 제외) · 달 · 연 매출은 청구월(마감월), 일 매출은 상차일 · 오더 건수는 취소를 뺀 전체 오더</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 예금 · 현금 잔액 기준" : ""}</Basis>
@@ -568,7 +575,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                       <defs><linearGradient id="exLabor" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={EX.goldHi} /><stop offset="100%" stopColor={EX.goldDeep} stopOpacity={0.75} /></linearGradient></defs>
                       <XAxis dataKey="k" {...chartTheme.axis} tick={{ ...chartTheme.axis.tick, fontSize: 11 }} interval={0} />
                       <Tooltip content={(p) => <ExecTooltip {...p} unit="" fmt={(v) => `${fmtWon(v)}원`} />} cursor={chartTheme.cursor} />
-                      <Bar dataKey="v" name="인건비" radius={[6, 6, 2, 2]} maxBarSize={26} label={{ position: "top", content: ({ x, y, width, index, value }) => (labor[index]?.m === laborBase.m && value ? <text x={x + width / 2} y={y - 6} textAnchor="middle" fill={EX.goldHi} fontSize={11} fontWeight={800} fontFamily={EX_NUM.fontFamily}>{axisMoney(value)}</text> : null) }}>
+                      <Bar isAnimationActive={false} dataKey="v" name="인건비" radius={[6, 6, 2, 2]} maxBarSize={26} label={{ position: "top", content: ({ x, y, width, index, value }) => (labor[index]?.m === laborBase.m && value ? <text x={x + width / 2} y={y - 6} textAnchor="middle" fill={EX.goldHi} fontSize={11} fontWeight={800} fontFamily={EX_NUM.fontFamily}>{axisMoney(value)}</text> : null) }}>
                         {labor.map((x) => <Cell key={x.m} fill={x.m === laborBase.m ? "url(#exLabor)" : "rgba(143,176,240,.28)"} />)}
                       </Bar>
                     </BarChart>
@@ -651,12 +658,13 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                   <YAxis yAxisId="w" tickFormatter={axisMoney} {...chartTheme.axis} width={50} />
                   <YAxis yAxisId="m" orientation="right" tickFormatter={(v) => `${v}%`} {...chartTheme.axis} tick={{ ...chartTheme.axis.tick, fill: "rgba(215,188,130,.7)" }} width={40} />
                   <Tooltip content={chartTip} cursor={chartTheme.cursor} />
-                  <Bar yAxisId="w" dataKey="sale" name="매출" radius={[7, 7, 2, 2]} maxBarSize={30}
+                  {/* ⚡ 2026-11-27 속도 — HOME 차트 애니메이션 끔(다시 그릴 때마다 움직여 CPU를 썼다) */}
+                  <Bar isAnimationActive={false} yAxisId="w" dataKey="sale" name="매출" radius={[7, 7, 2, 2]} maxBarSize={30}
                     label={{ position: "top", content: ({ x, y, width, index, value }) => (monthly[index]?.cur ? <text x={x + width / 2} y={y - 7} textAnchor="middle" fill={EX.goldHi} fontSize={11.5} fontWeight={800} fontFamily={EX_NUM.fontFamily}>{axisMoney(value)}</text> : null) }}>
                     {monthly.map((x) => <Cell key={x.k} fill={x.cur ? "url(#exSaleCur)" : "url(#exSale)"} />)}
                   </Bar>
-                  <Bar yAxisId="w" dataKey="profit" name="매출총이익" fill="rgba(75,108,183,.55)" radius={[7, 7, 2, 2]} maxBarSize={30} />
-                  <Line yAxisId="m" dataKey="margin" name="이익률" stroke={EX.gold} strokeWidth={2.2} connectNulls dot={{ r: 3, fill: EX.bg1, stroke: EX.gold, strokeWidth: 2 }} activeDot={{ r: 5, fill: EX.gold }} />
+                  <Bar isAnimationActive={false} yAxisId="w" dataKey="profit" name="매출총이익" fill="rgba(75,108,183,.55)" radius={[7, 7, 2, 2]} maxBarSize={30} />
+                  <Line isAnimationActive={false} yAxisId="m" dataKey="margin" name="이익률" stroke={EX.gold} strokeWidth={2.2} connectNulls dot={{ r: 3, fill: EX.bg1, stroke: EX.gold, strokeWidth: 2 }} activeDot={{ r: 5, fill: EX.gold }} />
                 </ComposedChart>
               ) : (
                 <AreaChart data={daily} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
@@ -665,8 +673,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                   <XAxis dataKey="k" interval={4} {...chartTheme.axis} />
                   <YAxis tickFormatter={axisMoney} {...chartTheme.axis} width={50} />
                   <Tooltip content={chartTip} cursor={{ stroke: EX.lineHi }} />
-                  <Area dataKey="sale" name="매출" stroke="#CFE0FF" strokeWidth={2} fill="url(#exArea)" />
-                  <Area dataKey="profit" name="매출총이익" stroke={EX.gold} strokeWidth={1.8} fill="transparent" />
+                  <Area isAnimationActive={false} dataKey="sale" name="매출" stroke="#CFE0FF" strokeWidth={2} fill="url(#exArea)" />
+                  <Area isAnimationActive={false} dataKey="profit" name="매출총이익" stroke={EX.gold} strokeWidth={1.8} fill="transparent" />
                 </AreaChart>
               )}
             </ResponsiveContainer>
@@ -679,16 +687,16 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           <button type="button" onClick={() => setAutoApproveDaily(company, !autoDaily, personName(me) || "")} aria-pressed={autoDaily}
             className="w-full mb-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 text-left transition"
             style={{ background: autoDaily ? "rgba(215,188,130,.10)" : "rgba(255,255,255,.035)", border: `1px solid ${autoDaily ? EX.lineHi : EX.line}` }}>
-            <span className="min-w-0 flex-1"><span className="block text-[14px] font-black" style={{ color: EX.text }}>일일 업무일지 자동 승인</span><span className="block text-[12.5px] font-medium" style={{ color: EX.mute }}>{autoDaily ? "켜짐: 상신 즉시 자동 승인됩니다" : "꺼짐: 임원이 직접 검토 후 승인합니다"}</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[14px] font-black" style={{ color: EX.text }}>일일 업무일지 자동 승인 <span className="text-[11.5px] font-bold" style={{ color: EX.mute }}>(회사 설정)</span></span><span className="block text-[12.5px] font-medium" style={{ color: EX.mute }}>{autoDaily ? "켜짐: 상신 즉시 자동 승인됩니다" : "꺼짐: 임원이 직접 검토 후 승인합니다"}{apSet.updatedBy ? ` · 마지막 변경 ${apSet.updatedBy}` : ""}</span></span>{/* 🛠 2026-11-27 결재함 [내 결재 자동 승인](개인)과 구분 · 누가 바꿨는지 */}
             <span className="relative w-[52px] h-[30px] rounded-full shrink-0 transition" style={{ background: autoDaily ? GOLD_GRAD : "rgba(255,255,255,.15)" }}>
               <span className={`absolute top-[3px] w-6 h-6 rounded-full bg-white shadow transition-all ${autoDaily ? "left-[25px]" : "left-[3px]"}`} />
             </span>
           </button>
           <div className="flex items-end gap-3 mb-3">
-            <Num value={mine.length} unit="건" size={40} color={mine.length ? EX.goldHi : EX.faint} />
-            <span className="pb-1 text-[12.5px] font-semibold" style={{ color: EX.mute }}>전사 진행 중 {pendingAll.length}건{late.length ? <> · <span style={{ color: EX.danger }}>48시간 초과 {late.length}건</span></> : ""}</span>
+            {apLoading ? <span className="text-[16px] font-black" style={{ color: EX.mute }}>불러오는 중…</span> : <Num value={mine.length} unit="건" size={40} color={mine.length ? EX.goldHi : EX.faint} />}
+            {!apLoading && <span className="pb-1 text-[12.5px] font-semibold" style={{ color: EX.mute }}>전사 진행 중 {pendingAll.length}건{late.length ? <> · <span style={{ color: EX.danger }}>48시간 초과 {late.length}건</span></> : ""}</span>}
           </div>
-          {!mine.length ? <Empty text="현재 결재 대기 문서가 없습니다" sub="새 문서가 상신되면 이곳에 즉시 표시됩니다." /> : (
+          {apLoading ? null : !mine.length ? <Empty text="현재 결재 대기 문서가 없습니다" sub="새 문서가 상신되면 이곳에 즉시 표시됩니다." /> : (
             <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
               {mine.slice(0, 8).map((a) => {
                 const h = Math.max(0, Math.floor((Date.now() - tsMs(a.createdAt)) / 3600e3));
@@ -828,13 +836,15 @@ export function TeamSchedule({ company }) {
 function TeamScheduleCompany({ company, modeSwitch }) {
   // ⭐ 2026-11-02 점검 — 회사 전체 approvals 조회 대신 연차(leave)만 조회(eventsOf도 leave만 사용)
   const approvals = useLeaveApprovalsOf(company);
-  const { staff } = useStaff(company);
+  const { staff, all } = useStaff(company);
   const today = kstToday();
   const [ym, setYm] = React.useState(today.slice(0, 7));
   const [team, setTeam] = React.useState("전체");
   const [pick, setPick] = React.useState(today);
   const teamOf = Object.fromEntries(staff.map((u) => [u.id, u.team || "미배정"]));
-  const evs = approvals.flatMap(eventsOf).map((e) => ({ ...e, team: teamOf[e.uid] || e.team || "미배정" })).filter((e) => team === "전체" || e.team === team);
+  // 🛠 2026-11-27 퇴사자의 결재 중 휴가 · 퇴사일 뒤 휴가는 일정 · 부재 집계에서 뺀다(인사 HOME 이번 주 부재와 같은 기준)
+  const leftOn = Object.fromEntries((all || []).filter((u) => u.employmentStatus === "퇴사").map((u) => [u.id, String(u.resignedAt || u.resignDate || u.퇴사일 || "").slice(0, 10)]));
+  const evs = approvals.flatMap(eventsOf).filter((e) => !(e.uid in leftOn) || (e.status === "approved" && !!leftOn[e.uid] && e.date <= leftOn[e.uid])).map((e) => ({ ...e, team: teamOf[e.uid] || e.team || "미배정" })).filter((e) => team === "전체" || e.team === team);
   const teams = ["전체", ...Array.from(new Set(staff.map((u) => u.team || "미배정")))];
   const first = new Date(`${ym}-01T00:00:00Z`);
   const startDow = first.getUTCDay();

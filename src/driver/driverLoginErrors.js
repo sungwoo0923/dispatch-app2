@@ -94,8 +94,10 @@ export function describeDriverLoginError(err, ctx = {}) {
   if (code === "driver/not-driver") return { ...base, tone: "error", title: "기사 계정이 아니에요", message: "이 정보는 운송사 직원 또는 화주사 계정이에요.", hint: "가입하신 로그인 화면(운송사/화주사)에서 로그인해 주세요." };
   if (code === "driver/no-user-doc") return { ...base, tone: "error", title: "가입 정보를 찾지 못했어요", message: "계정은 있지만 기사 가입 정보가 없어요. 거절됐거나 삭제됐을 수 있어요.", hint: "기사 등록을 다시 하시거나 운송사 관리자에게 문의해 주세요." };
   if (code === "driver/phone-incomplete") return { ...base, tone: "error", title: "휴대폰번호를 끝까지 입력해 주세요", message: "휴대폰번호는 010부터 전체 번호를 넣어야 해요.", hint: "예: 01012345678 (차량번호로 로그인하려면 차량번호 전체를 넣어 주세요.)" };
+  // 🔒 2026-11-27 계정은 있는데 이 기기에 로그인 열쇠가 없음(새 휴대폰 · 앱 재설치) — 문자 인증으로 이 기기를 등록
+  if (code === "driver/need-sms") return { ...base, tone: "wait", title: "문자 인증이 한 번 필요해요", message: "이 휴대폰에서는 처음 로그인하시는 것 같아요.", hint: "아래 [문자 인증으로 로그인]을 누르고, 가입할 때 넣은 휴대폰번호로 받은 인증번호를 넣으면 바로 로그인돼요." };
   if (code === "driver/phone-not-registered") return { ...base, tone: "error", title: "등록된 휴대폰번호가 없어요", message: `${phText ? `휴대폰번호 '${phText}'` : "입력하신 휴대폰번호"}로 가입된 기사 정보를 찾지 못했어요.`, hint: "가입할 때 적은 휴대폰번호인지 확인해 주세요. 번호가 바뀌셨다면 차량번호로 로그인하거나 운송사 관리자에게 문의해 주세요." };
   if (code === "driver/not-registered" || code === "auth/invalid-credential" || code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-login-credentials" || code === "auth/invalid-email")
-    return { ...base, code: "driver/not-registered", tone: "error", title: "등록된 차량번호가 없어요", message: `${plate ? `차량번호 '${plate}'` : "입력하신 차량번호"}로 가입된 기사 정보를 찾지 못했어요.`, hint: "차량번호를 다시 확인해 주세요(예: 경기97가1234). 차량이 바뀌셨다면 휴대폰번호로 로그인해 주세요. 아직 가입하지 않으셨다면 아래 [기사 등록하기]를 눌러 주세요." };
+    return { ...base, code: "driver/not-registered", tone: "error", title: "등록된 차량번호가 없어요", message: `${plate ? `차량번호 '${plate}'` : "입력하신 차량번호"}로 가입된 기사 정보를 찾지 못했어요.`, hint: "차량번호를 다시 확인해 주세요(예: 경기97가1234). 차량이 바뀌셨다면 휴대폰번호로 로그인해 주세요. 새 휴대폰이라면 [문자 인증으로 로그인]을, 아직 가입하지 않으셨다면 [기사 등록하기]를 눌러 주세요." };
   return { ...base, tone: "error", title: "로그인하지 못했어요", message: "알 수 없는 이유로 로그인을 확인하지 못했어요.", hint: `잠시 후 다시 시도해 주세요. 계속되면 운송사 관리자에게 문의해 주세요.${code ? ` (오류: ${code})` : ""}` };
 }

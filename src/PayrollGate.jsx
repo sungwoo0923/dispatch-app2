@@ -256,7 +256,7 @@ export default function PayrollGate({ company, canAdmin = false, children, scope
       const r = await api.verify(company, pw);
       if (r.ok) { openSession(company); setPw(""); if (r.mustChange) { setSt((s) => ({ ...s, usingDefault: true })); setChanging(true); } }
       else if (r.lockUntil) setMsg(`여러 번 틀려서 ${new Date(r.lockUntil).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}까지 잠겼어요`);
-      else setMsg(`비밀번호가 맞지 않아요 · ${r.left}번 더 틀리면 잠깐 잠겨요${st.usingDefault ? " (처음 비밀번호는 숫자 0 여섯 개 000000)" : ""}`);
+      else setMsg(`비밀번호가 맞지 않아요 · ${r.left}번 더 틀리면 잠깐 잠겨요${st.usingDefault && (st.admin || canAdmin) ? " (처음 비밀번호는 숫자 0 여섯 개 000000)" : ""}`);
       if (r.lockUntil) setSt((s) => ({ ...s, lockUntil: r.lockUntil }));
     } catch (er) { setMsg(er.message || "확인하지 못했어요"); } finally { setBusy(false); }
   };
@@ -285,7 +285,7 @@ export default function PayrollGate({ company, canAdmin = false, children, scope
           {msg && <div className={`rounded-xl px-3.5 py-2.5 text-[14px] font-bold border ${/틀|잠겼어요|맞지/.test(msg) && !/다시 잠갔/.test(msg) ? "bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]" : "bg-[#F5F8FD] border-[#DCE3EE] text-[#1B2B4B]"}`} role="status">{msg}</div>}
           <button type="submit" disabled={busy || !pw} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40" data-testid="payroll-unlock">{busy ? "확인 중…" : "잠금 해제"}</button>
           {(st.lockUntil || 0) > Date.now() && !msg && <div className="rounded-xl px-3.5 py-2.5 text-[14px] font-bold border bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]" role="status">여러 번 틀려서 {new Date(st.lockUntil).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}까지 잠겨 있어요. 그때까지는 맞는 비밀번호를 넣어도 안 열려요.</div>}
-          <div className="text-[14px] font-bold text-[#7A879C]" data-testid="payroll-pw-hint">초기 비밀번호는 000000 입니다.</div> {/* 💬 2026-11-19 사용자 요청 — 설명은 이 한 줄만 */}
+          <div className="text-[14px] font-bold text-[#7A879C]" data-testid="payroll-pw-hint">{isPayAdmin && st.usingDefault ? "초기 비밀번호는 000000 이에요. 열면 바로 새 비밀번호로 바꿔야 해요." : "초기 비밀번호는 관리자에게 문의하세요."}</div> {/* 💬 2026-11-19 사용자 요청 — 설명은 이 한 줄만 · 🔒 2026-11-27 초기값(000000)은 아직 안 바꾼 회사의 경리 관리자에게만 보인다(사무원 아무나 열던 것) — 관리자가 열면 아래 변경 창이 닫히지 않게 뜬다 */}
           {isPayAdmin && !st.usingDefault && <button type="button" onClick={() => { setMsg(""); setResetting(true); }} className="w-full h-11 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-black text-[#1B2B4B]" data-testid="payroll-forgot">비밀번호를 잊었어요</button>}
         </form>
       </GateCard>

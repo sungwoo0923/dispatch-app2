@@ -28,6 +28,7 @@ import LeaveArea from "./LeaveArea";
 import { SafetyEduAdmin } from "./SafetyEdu"; // 🦺 2026-11-24 안전교육 이수 현황 · 기사 영상 대체 설정
 import { HrFleetPanel, HR_FLEET_KINDS } from "./HrFleet"; // 🚛 2026-11-15 지입관리(전체 · 지입 · 직영 · 임대)
 import { kpConfirm } from "./kpDialog";
+import { useStaffHireDates } from "./hireDate";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -47,8 +48,8 @@ const ROLE_DESC = {
   test: "경리 화면: 정산·회계·자금·비품·퇴직 정산",
   hrAcct: "경리 + 인사: 상단 [화면 전환]으로 경리 화면 ↔ 인사 화면 전환",
   allMgr: "운송 + 영업 + 경리 + 인사: 상단 [화면 전환]으로 운송 · 영업 · 경리 · 인사 화면 전환. 부서가 임원이면 로그인할 때 경영 브리핑부터",
-  salesMgr: "영업관리자: 영업 화면(영업관리·거래처·단가표·매출, 인센티브 규정·거래처 담당 지정)",
-  salesStaff: "영업사무원: 영업 화면(본인 실적·인센티브·영업 기회, 권한 관리에서 조정)",
+  salesMgr: "영업관리자: 영업 화면(영업관리·단가표·운임조회, 인센티브 규정·거래처 담당 지정·견적서 작성)",
+  salesStaff: "영업사무원: 영업 화면(본인 실적·인센티브·영업 기회·견적서 작성, 권한 관리에서 조정)",
   acctStaff: "경리사무원: 경리 화면(자금·매출 제외, 권한 관리에서 조정)",
   hrStaff: "인사사무원: 인사 화면(기사 승인 제외, 권한 관리에서 조정)",
   legalMgr: "법무관리자: 전자결재·계약서·회사관리 + 거래처 조회(권한 관리에서 조정)",
@@ -65,7 +66,9 @@ function useStaff(company) {
     if (!company) return undefined;
     return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setUsers([]));
   }, [company]);
-  return (users || []).filter((u) => (u.companyName || DEFAULT_COMPANY) === company && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && !isTMUser(u));
+  // 🛠 2026-11-27 가입 승인 대기(approved: false) 계정은 직원 목록 · 재직 인원에서 뺀다(관리자메뉴 › 회원 관리에서 승인) — 예전엔 '재직'으로 섞였다
+  const list = React.useMemo(() => (users || []).filter((u) => (u.companyName || DEFAULT_COMPANY) === company && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && !isTMUser(u) && u.approved !== false), [users, company]);
+  return useStaffHireDates(list); // 🗓 2026-11-27 입사일은 인사 프로필 먼저(src/hireDate.js — 연차 · 급여와 같은 순서)
 }
 
 // ═════════════════ 직원 등록(계정 없이) ═════════════════

@@ -15,7 +15,8 @@ import React from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { collection, doc, onSnapshot, query, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, where, writeBatch } from "firebase/firestore";
-import * as XLSX from "xlsx";
+// ⚡ 2026-11-27 속도 — xlsx 는 엑셀 버튼을 누를 때 받는다(배차 프로그램 첫 묶음에서 뺐다)
+const loadXLSX = () => import("xlsx");
 import { db, auth } from "./firebase";
 import { StatementDoc, PenaltyDoc, ImageViewer, PENALTY_KINDS, PENALTY_PAYERS, won, acctLine } from "./driverDocs";
 // ⭐ 2026-11-05 고정폭 글씨 → 상단 메뉴와 같은 기본 글씨체(흐릿해 보인다는 의견)
@@ -335,7 +336,8 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
     ? <button type="button" disabled={busy} onClick={async () => { setBusy(true); await unmarkPaid(r); setBusy(false); }} className={`${cls} border border-[#DCE3EE] bg-white text-[#5B6B85]`} title="이 명세서로 지급완료한 오더를 미지급으로 되돌려요">지급 취소</button>
     : <button type="button" disabled={busy || !r.trips.length} onClick={() => paySelected(new Set([r.key]))} className={`${cls} border border-[#1B2B4B] bg-white text-[#1B2B4B]`} title="오더를 지급완료로 바꾸고 장부에 실지급액을 남겨요">지급 완료</button>);
 
-  const bankExcel = () => {
+  const bankExcel = async () => {
+    const XLSX = await loadXLSX();
     const list = rows.filter((r) => (sel.size ? sel.has(r.key) : true) && r.net > 0);
     const aoa = [["순번", "은행", "계좌번호", "예금주", "이체금액", "받는분 통장 표시", "내 통장 표시", "기사명", "차량번호", "계좌 확인"]];
     list.forEach((r, i) => {
@@ -348,7 +350,8 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
     XLSX.writeFile(wb, `대량이체_${co}_${ym}.xlsx`);
   };
   // 📥 엑셀 다운로드 — 시트 3개: 지급 요약 / 운행 내역(전체) / 공제 내역
-  const summaryExcel = () => {
+  const summaryExcel = async () => {
+    const XLSX = await loadXLSX();
     const list = sel.size ? rows.filter((r) => sel.has(r.key)) : shown;
     if (!list.length) { kpAlert("내려받을 기사님이 없습니다."); return; }
     const wb = XLSX.utils.book_new();
@@ -558,7 +561,8 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
   const saveImage = () => savePngA4(docRef.current, `정산서_${cur.d.이름}_${ym}`);
   const savePdf = () => savePdfA4(docRef.current, `정산서_${cur.d.이름}_${ym}`);
   const printDoc = () => printA4(docRef.current, `정산서_${cur.d.이름}_${ym}`);
-  const excel = () => {
+  const excel = async () => {
+    const XLSX = await loadXLSX();
     const aoa = [["순번", "상차일", "거래처", "상차지", "경유", "하차지", "화물", "톤수", "기사운임"]];
     cur.trips.forEach((t, i) => aoa.push([i + 1, t.date, t.client, t.from, t.via, t.to, t.cargo, t.ton, t.fare]));
     aoa.push([], ["", "", "", "", "", "", "", "운임 합계", cur.gross], ["", "", "", "", "", "", "", "부가세", cur.vat]);
@@ -575,7 +579,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
       <Hero en="SETTLEMENT · DRIVER" title="개별 정산서" desc="기사님 한 분씩 운행 내역·공제·실지급액을 자세히 보고 인쇄·저장·발송합니다">
         <div className="flex items-center gap-2 flex-wrap">
           <MonthPicker value={ym} onChange={setYm} dark />
-          <button type="button" onClick={() => { const list = rows.filter((r) => r.trips.length || r.deductTotal); if (!list.length) { kpAlert("내려받을 내용이 없습니다."); return; } const wb = XLSX.utils.book_new(); list.forEach((r) => { const aoa = [["순번", "상차일", "거래처", "상차지", "경유", "하차지", "화물", "톤수", "기사운임"]]; r.trips.forEach((t, i) => aoa.push([i + 1, t.date, t.client, t.from, t.via, t.to, t.cargo, t.ton, t.fare])); aoa.push([], ["", "", "", "", "", "", "", "운임 합계", r.gross], ["", "", "", "", "", "", "", "부가세", r.vat]); r.deductions.forEach((d) => aoa.push(["", "", "", "", "", "", "", `공제 · ${d.label}`, -d.amount])); aoa.push(["", "", "", "", "", "", "", "실지급액", r.net]); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), String(`${r.d.이름}_${r.d.차량번호}`).replace(/[\\/?*[\]:]/g, "").slice(0, 31)); }); XLSX.writeFile(wb, `개별정산서_전체_${co}_${ym}.xlsx`); }} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black whitespace-nowrap" title="기사님별 시트로 한 파일에">⇩ 전체 엑셀</button>
+          <button type="button" onClick={async () => { const list = rows.filter((r) => r.trips.length || r.deductTotal); if (!list.length) { kpAlert("내려받을 내용이 없습니다."); return; } const XLSX = await loadXLSX(); const wb = XLSX.utils.book_new(); list.forEach((r) => { const aoa = [["순번", "상차일", "거래처", "상차지", "경유", "하차지", "화물", "톤수", "기사운임"]]; r.trips.forEach((t, i) => aoa.push([i + 1, t.date, t.client, t.from, t.via, t.to, t.cargo, t.ton, t.fare])); aoa.push([], ["", "", "", "", "", "", "", "운임 합계", r.gross], ["", "", "", "", "", "", "", "부가세", r.vat]); r.deductions.forEach((d) => aoa.push(["", "", "", "", "", "", "", `공제 · ${d.label}`, -d.amount])); aoa.push(["", "", "", "", "", "", "", "실지급액", r.net]); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), String(`${r.d.이름}_${r.d.차량번호}`).replace(/[\\/?*[\]:]/g, "").slice(0, 31)); }); XLSX.writeFile(wb, `개별정산서_전체_${co}_${ym}.xlsx`); }} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black whitespace-nowrap" title="기사님별 시트로 한 파일에">⇩ 전체 엑셀</button>
           <Stat k="운행 기사님" v={`${rows.filter((r) => r.trips.length).length}명`} />
           <Stat k="실지급 합계" v={`${won(rows.reduce((s, r) => s + (r.trips.length || r.deductTotal ? r.net : 0), 0))}원`} />
         </div>

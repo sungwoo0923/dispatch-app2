@@ -58,7 +58,7 @@ async function findCompanies(q, exact = false) {
 
 
 const SERVICE_TERMS = `제1조 (목적)
-본 약관은 S-Flow 물류 관리 플랫폼(이하 "서비스")의 운송사 회원 이용과 관련하여 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.
+본 약관은 LogisWeb 물류 관리 플랫폼(이하 "서비스")의 운송사 회원 이용과 관련하여 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.
 
 제2조 (서비스 내용)
 ① 배차 관리, 기사 관리, 운임 정산, 거래처 관리 등 운송 업무 전반에 관한 기능을 제공합니다.
@@ -415,6 +415,10 @@ function SignupForm({ signupType, onBack }) {
       }
     };
 
+    // 🛠 2026-11-27 가입 중 잠깐 로그인 → 로그아웃할 때 App 이 '실제 로그아웃'으로 보고 기기 정리 + 새로 고침을 해서
+    //  완료 안내 없이 '가입 유형 선택'으로 돌아갔다 → 가입 중 표시를 남겨 정리를 건너뛰고, 완료 상태는 탭에 기억해 다시 그려져도 완료 화면을 보여 준다
+    try { sessionStorage.setItem("kpSignupBusy", "true"); } catch { /* 무시 */ }
+    const markDone = () => { try { sessionStorage.setItem("kpSignupDone", signupType || "신규"); } catch { /* 무시 */ } setSuccess(true); };
     try {
       let res;
       // ⏱ 2026-11-12 단계마다 시간 제한 — 서버가 답이 없으면 어느 단계인지 알려 주고 다시 누를 수 있게(이어서 처리됨)
@@ -427,7 +431,7 @@ function SignupForm({ signupType, onBack }) {
       }
       await withTimeout(writeUserDocs(res.user.uid), 30000, "가입 정보 저장");
       await signOut(auth).catch(() => {});
-      setSuccess(true);
+      markDone();
     } catch (err) {
       const code = err.code || "";
       if (code === "auth/email-already-in-use") {
@@ -444,11 +448,11 @@ function SignupForm({ signupType, onBack }) {
           if (isDeleted) {
             await withTimeout(writeUserDocs(reLogin.user.uid), 30000, "가입 정보 저장");
             await signOut(auth);
-            setSuccess(true);
+            markDone();
           } else if (pendingMine && myApps && myApps.empty) {
             await withTimeout(writeApplication(reLogin.user.uid), 30000, "가입 정보 저장");
             await signOut(auth);
-            setSuccess(true);
+            markDone();
           } else if (pendingMine) {
             await signOut(auth);
             setError("이미 가입 신청이 접수돼 있어요. 관리자 승인 후 로그인할 수 있습니다.");
@@ -476,9 +480,11 @@ function SignupForm({ signupType, onBack }) {
       }
     } finally {
       setLoading(false);
+      setTimeout(() => { try { sessionStorage.removeItem("kpSignupBusy"); } catch { /* 무시 */ } }, 4000); // 로그아웃 알림이 다 지나간 뒤 지운다
     }
   };
 
+  if (success) return <SignupDone type={signupType} />;
   return (
     <>
     <div className="min-h-screen bg-[#EEF2F8] flex items-start lg:items-center justify-center px-0 sm:px-4 py-0 sm:py-8">
@@ -822,9 +828,30 @@ function Field({ label, required, children, full }) {
 }
 
 // ── 메인 컴포넌트 ──────────────────────────────────────────────────────────────
+function SignupDone({ type }) {
+  const navigate = useNavigate();
+  const leave = (to) => { try { sessionStorage.removeItem("kpSignupDone"); } catch { /* 무시 */ } navigate(to); };
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 py-10" style={{ background: GRID_BG }}>
+      <div className="w-full max-w-[460px] bg-white rounded-[26px] shadow-[0_24px_60px_rgba(11,20,40,.35)] p-8 text-center">
+        <LogisMark size={48} style={{ margin: "0 auto 14px" }} />
+        <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#2D4C82]" style={{ fontFamily: MONO }}>SIGN UP · DONE</div>
+        <h1 className="text-[24px] font-black text-[#0F1A30] mt-1">가입 신청이 끝났어요</h1>
+        <p className="text-[14.5px] text-[#5B6B85] mt-2 leading-relaxed">
+          {type === "기존" ? "회사 관리자가 승인하면 로그인할 수 있어요." : "관리자가 승인하면 로그인할 수 있어요."}<br />승인되면 가입한 이메일 · 비밀번호로 로그인하면 돼요.
+        </p>
+        <button type="button" onClick={() => leave("/login")}
+          className="mt-6 w-full h-12 rounded-xl text-white text-[15px] font-black" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>로그인 화면으로</button>
+      </div>
+    </div>
+  );
+}
+
 export default function Signup() {
   const [signupType, setSignupType] = useState(null);
+  const [doneType] = useState(() => { try { return sessionStorage.getItem("kpSignupDone") || ""; } catch { return ""; } });
 
+  if (doneType) return <SignupDone type={doneType} />;
   if (!signupType) {
     return <TypeSelect onSelect={setSignupType} />;
   }

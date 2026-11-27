@@ -10,6 +10,7 @@ import { geocodeAddress } from "./tmapFareCalc";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { isTMUser } from "./staffFilter";
 import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "./attendanceQuick";
+import { confirmEarlyLeave } from "./earlyLeave"; // 🛠 2026-11-27 조퇴 확인
 import { ATTENDANCE_STATUS_COLOR, findApprovedLeaveForDate, isHoliday, getHolidayLabel, KR_NATIONAL_HOLIDAYS, approvalLeaveOn, hrLeaveOn, attendanceSourceText } from "./attendanceUtils";
 import { useCustomRoles } from "./customRoles";
 // 🗓 2026-11-23 근무 요일(회사 전체 + 직원별) · 휴일근무 · 대체휴무
@@ -392,6 +393,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   // ─── 오늘 퇴근 처리 ─────────────────────────────────────────
   const handleCheckOut = async () => {
     if (!user?.uid) return;
+    if ((await confirmEarlyLeave(myEmp, myTodayRec)) === false) return; // 🛠 2026-11-27 정해진 퇴근 시간 전이면 조퇴 확인
     const checkOutTime = new Date().toISOString();
     await setDoc(doc(db, "attendance", `${todayDateStr}_${user.uid}`), {
       checkOutTime, checkOutSource: "manual",

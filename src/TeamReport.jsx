@@ -14,6 +14,8 @@ import { useCompanyPeople } from "./dailyReport";
 import { useRouteCarrierFilter } from "./routeCarriers"; // 📏 2026-11-25 끈 운송업체 고정노선 오더는 매출에서 뺀다(다른 보고서와 같게)
 import { hideBlind } from "./blind"; // 📏 2026-11-25 블라인드 오더는 최고관리자 외에는 안 보이게(다른 화면과 같게)
 import { useUserNameMap, orderStaffNameRaw, ORDER_MGR_FIXED } from "./detailGetters";
+import { useCompanyRows } from "./companyColStore";
+import { accountMap } from "./salesCore"; // 💼 2026-11-27 영업팀 실적 = 거래처 담당 기준
 import { useMyProfile } from "./userNames";
 import { isExecProfile, TEAM_OPTIONS } from "./hrConstants";
 import { getNationalHolidayLabel } from "./attendanceUtils";
@@ -161,7 +163,15 @@ export default function TeamReport({ company, me }) {
     Promise.all([q("orders"), q("dispatch")]).then(([a, b]) => { if (alive) setRows([...a, ...b]); }).catch((e) => { if (alive) { setRows([]); setLoadErr(e?.message || String(e)); } });
     return () => { alive = false; };
   }, [canMake, company, period.prevFrom, period.to]);
-  const staffOf = React.useCallback((r) => { const n = orderStaffNameRaw(r, nameMap); return (n && n !== ORDER_MGR_FIXED ? n : "") || String(r?.배차확정자 || "").trim() || n || ""; }, [nameMap]);
+  // 💼 2026-11-27 영업팀 보고서 — 오더를 "입력한 사람"이 아니라 거래처 담당(영업관리 › 거래처 담당 · 수주일 이후)으로 센다.
+  //  예전엔 입력자가 영업팀인 오더만 세서, 같은 시각 영업 현황 274만원인데 보고서는 0원이었다(영업 인센티브 calcIncentive 와 같은 기준)
+  const salesTeam = /영업/.test(String(team || ""));
+  const accounts = useCompanyRows("salesAccounts", salesTeam ? company : "");
+  const acc = React.useMemo(() => accountMap(accounts || []), [accounts]);
+  const staffOf = React.useCallback((r) => {
+    if (salesTeam) { const a = acc.get(String(r?.거래처명 || "").trim()); const d = String(r?.상차일 || "").slice(0, 10); return a && !(a.since && d < a.since) ? String(a.name || "").trim() : ""; }
+    const n = orderStaffNameRaw(r, nameMap); return (n && n !== ORDER_MGR_FIXED ? n : "") || String(r?.배차확정자 || "").trim() || n || "";
+  }, [nameMap, salesTeam, acc]);
   const members = React.useMemo(() => teamMembers(people, team), [people, team]);
   // 📏 2026-11-25 다른 보고서와 같은 입구 거름 — 끈 운송업체 고정노선 오더 · 블라인드 오더 제외(배차완료 기준은 buildTeamReport 가 salesRule 로)
   const carrierF = useRouteCarrierFilter(company);

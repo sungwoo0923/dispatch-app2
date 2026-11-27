@@ -1,6 +1,6 @@
 // 2단계 마감 · 거래명세서 양식 테스트 — node scripts/closeFlow.test.mjs
 import assert from "node:assert/strict";
-import { closeBoard, closeChecks, canSubmit, canVerify, verifyPatch, canApprove, canReject, submitPatch, approvePatch, rejectPatch, unlockPatch, dayBoard, closeCounts, isMine, prevYmOf } from "../src/closeFlow.js";
+import { closeBoard, closeChecks, canSubmit, canVerify, verifyPatch, canApprove, canReject, submitPatch, approvePatch, rejectPatch, unlockPatch, dayBoard, closeCounts, isMine, prevYmOf, nextYmOf, carryPatchOf, carryPlan } from "../src/closeFlow.js";
 import { normalizeForm, pickForm, visibleCols, headerLabels, BASE_FORM, formDoc } from "../src/invoiceForm.js";
 
 const me = { email: "Kim@Co.kr", uid: "u1", name: "김배차" };
@@ -60,6 +60,27 @@ assert.ok(row("가나상사").changed && !canApprove(row("가나상사")) && can
 const ap = approvePatch(closeBoard(orders, "2026-10", { me, today, closeOf }).find((r) => r.client === "가나상사"), { name: "최경리" });
 assert.equal(ap.status, "approved"); assert.equal(unlockPatch(row("가나상사"), me).status, "none");
 assert.deepEqual(closeCounts(closeBoard(orders, "2026-10", { me, today, closeOf })), { none: 2, verified: 0, submitted: 1, rejected: 0, approved: 0 });
+// ⚠ 2026-11-27 최종마감 뒤 — 오더 건수나 오더 금액이 바뀌면 '마감 후 변경'(명세서 화면 수정은 오더를 안 바꿔서 안 잡힘)
+assert.deepEqual([ap.snapshot.count, ap.snapshot.sale], [2, 200000], "최종마감 때 건수 · 금액을 남긴다");
+docs.set("가나상사|2026-10", { ...sp, ...ap });
+B = closeBoard(orders, "2026-10", { me, today, closeOf });
+assert.ok(!row("가나상사").changed, "최종마감 그대로");
+B = closeBoard(orders.map((x) => (x._id === "1" ? { ...x, 청구운임: "130000" } : x)), "2026-10", { me, today, closeOf });
+assert.ok(row("가나상사").changed, "잠금 중 오더 금액만 바뀜 → 마감 후 변경(운송팀 월 마감에서도 보이게 · 2026-11-27)");
+B = closeBoard(orders.filter((x) => x._id !== "2"), "2026-10", { me, today, closeOf });
+assert.ok(row("가나상사").changed && !canApprove(row("가나상사")) && !canVerify(row("가나상사")), "잠금 중 건수가 바뀜 → 마감 후 변경(배차 쪽 검증 버튼은 그대로 없음)");
+docs.set("가나상사|2026-10", { ...sp, ...ap, unlocked: true });
+B = closeBoard(orders.map((x) => (x._id === "1" ? { ...x, 청구운임: "130000" } : x)), "2026-10", { me, today, closeOf });
+assert.ok(row("가나상사").changed, "일시해제 중엔 금액이 바뀌어도 알림");
+docs.set("가나상사|2026-10", { ...sp, status: "submitted" });
+// 🗓 2026-11-27 이월 오더 일괄 마감월 지정
+assert.equal(nextYmOf("2026-12"), "2027-01");
+assert.deepEqual(carryPatchOf({ 상차일: "2026-10-31" }, "next"), { 마감월: "2026-11" }, "익월 = 상차일 다음 달");
+assert.equal(carryPatchOf({ 상차일: "2026-10-31", 마감월: "2026-11" }, "next"), null, "이미 그 달");
+assert.deepEqual(carryPatchOf({ 상차일: "2026-10-31", 마감월: "2026-11" }, "clear"), { 마감월: "" });
+assert.equal(carryPatchOf({ 상차일: "2026-10-31" }, "ym", "12월"), null, "잘못 적은 달은 안 바꿈");
+const cp = carryPlan([{ _id: "a", 상차일: "2026-10-31" }, { _id: "b", 상차일: "2026-10-30", 마감월: "2026-11" }, { _id: "c", 상차일: "2026-10-29" }], "ym", "2026-11", (x) => x._id === "c");
+assert.deepEqual([cp.todo.map((x) => x.o._id), cp.same, cp.locked], [["a"], 1, 1], "이미 그 달 · 최종마감은 빼고");
 // 일 마감 — 그날 내 오더만
 const D = dayBoard(orders, "2026-10-05", me, today);
 assert.deepEqual([D.count, D.sale, D.block, D.warn], [2, 150000, 0, 1], "같은 날 같은 구간은 검사 안 함 · 기사운임 빈칸은 알림");

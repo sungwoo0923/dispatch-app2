@@ -8,6 +8,7 @@
 // ⭐ 2026-11-17 예외: 수익 식은 functions/profitCore.mjs(가져오는 것 없음)를 forkliftCore.js 로 가져온다 — 배차표 수수료와 같은 식
 //  매입(buy) = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출이익 = 매출 − 매입 = orderProfit
 import { orderProfit, orderCost, fkNum } from "./forkliftCore.js";
+import { isSettledIn } from "../functions/arCore.mjs"; // 💰 2026-11-27 정산완료 = 청구월 키(정산 홈 · 미수금관리와 같게)
 import { salesMonthOf } from "./salesRule.js"; // 🗓 2026-11-25 실적 달 = 청구월(마감월 → 없으면 상차일 달) — 매출관리 · 미수금과 같은 달(가져오는 것: arCore · profitCore 뿐)
 
 export const toInt = (v) => fkNum(v); // 🛠 2026-11-25 매출이익(orderProfit)과 같은 금액 읽기(소수점 반올림)
@@ -74,7 +75,9 @@ export function accountMap(accounts = []) {
 }
 // 수금 여부 — 정산관리 › 거래처정산에서 그 달을 「정산완료」로 처리하면 오더마다 정산상태["YYYY-MM"]이 찍힌다.
 //  한 거래처의 그 달 오더가 모두 정산완료면 수금된 것으로 본다(거래처정산 화면과 같은 기준)
-export const orderSettled = (r) => { if (r?.수금 != null) return !!r.수금; const d = orderDate(r); return (r?.정산상태 && typeof r.정산상태 === "object" ? r.정산상태[d.slice(0, 7)] : "") === "정산완료"; };
+//  💰 2026-11-27 정산 홈 · 미수금관리와 같은 기준 — 청구월(마감월) 정산완료(isSettledIn · 예전 상차월 키도 봄) 또는 입금 확인 [입금완료].
+//   예전엔 상차월 키만 봐서 우리마트처럼 정산 쪽은 '입금 완료'인데 영업관리는 '미수'로 나왔다
+export const orderSettled = (r) => { if (r?.수금 != null) return !!r.수금; return String(r?.입금상태 || "") === "입금완료" || isSettledIn(r, salesMonthOf(r)); };
 
 // ─── 한 사람 · 한 달 인센티브 ───
 //  orders: 배차완료 오더(청구운임·기사운임·거래처명·상차일·정산상태) / accounts: 거래처 담당 / target: 그 달 매출 목표
@@ -91,7 +94,7 @@ export function calcIncentive({ orders = [], accounts = [], policy: pIn, uid, ym
     if (!a || a.uid !== uid) return;
     if (a.since && d < a.since) return; // 수주일 전 오더는 내 실적이 아니다
     const sale = toInt(r.청구운임), buy = orderCost(r); // ⭐ 2026-11-17 기사운임 + 지게차·외부 지급
-    const g = by.get(c) || { client: c, since: a.since || "", n: 0, sale: 0, buy: 0, base: 0, exN: 0, exSale: 0, open: 0 };
+    const g = by.get(c) || { client: c, since: a.since || "", existing: a.existing === true, n: 0, sale: 0, buy: 0, base: 0, exN: 0, exSale: 0, open: 0 };
     g.n += 1; g.sale += sale; g.buy += buy;
     if (!orderSettled(r)) g.open += 1;
     const margin = sale > 0 ? ((sale - buy) / sale) * 100 : 0;
@@ -110,7 +113,7 @@ export function calcIncentive({ orders = [], accounts = [], policy: pIn, uid, ym
   let gross = 0;
   rows.forEach((x) => {
     const age = x.since ? monthGap(x.since.slice(0, 7), ym) : 999;
-    x.isNew = !!x.since && age >= 0 && age < policy.newMonths;
+    x.isNew = !!x.since && !x.existing && age >= 0 && age < policy.newMonths; // 🔒 2026-11-27 담당 지정 전부터 거래하던 거래처(existing)는 신규 가산 없음
     x.isMature = policy.matureMonths > 0 && !!x.since && age >= policy.matureMonths;
     const factor = x.isMature ? policy.matureFactor / 100 : 1;
     x.rate = effRate * factor + (x.isNew ? policy.newBonus : 0);
@@ -159,7 +162,7 @@ export function clientHealth({ orders = [], accounts = [], clients = [], today =
     const a = acc.get(g.client) || null;
     const idle = g.last ? dayGap(g.last, today) : null;
     const change = g.p30 > 0 ? ((g.r30 - g.p30) / g.p30) * 100 : (g.r30 > 0 ? 100 : 0);
-    const isNew = !!a?.since && monthGap(a.since.slice(0, 7), ym) >= 0 && monthGap(a.since.slice(0, 7), ym) < policy.newMonths;
+    const isNew = !!a?.since && a.existing !== true && monthGap(a.since.slice(0, 7), ym) >= 0 && monthGap(a.since.slice(0, 7), ym) < policy.newMonths;
     let state = "steady";
     if (!g.last) state = "none";
     else if (idle > 30) state = "sleep";
@@ -214,4 +217,8 @@ export function simulateWin({ current, policy: pIn, monthlyRevenue = 0, marginRa
 // 영업 담당자인지(부서 이름에 영업 · 영업 역할) / 영업 관리 권한(규정·목표·거래처 배정·인센티브 확정)
 export const SALES_ROLES = ["salesMgr", "salesStaff"];
 export const isSalesUser = (u) => !!u && (SALES_ROLES.includes(u.role) || /영업/.test(String(u.team || "")));
+// 🔒 2026-11-27 자기 결재 막기 — 본인 인센티브 확정 · 지급 완료는 다른 영업 관리 권한자(임원 · 운송/통합관리자 · 마스터)가 한다(firestore.rules salesIncentives 와 같음)
+export const canConfirmIncentive = (who, uid) => !!who?.canManage && !!uid && uid !== who.uid;
+// 담당 지정 전부터 거래하던 거래처인가 — 첫 오더일이 수주일보다 앞이면 기존 거래처(신규 가산 없음)
+export const isExistingClient = (firstOrderDay, since) => !!firstOrderDay && !!since && firstOrderDay < since;
 export const canManageSales = ({ role = "", isMaster = false, exec = false } = {}) => ["salesMgr", "admin", "allMgr", "totalMaster"].includes(role) || isMaster === true || exec === true;

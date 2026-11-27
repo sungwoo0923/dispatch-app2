@@ -22,6 +22,9 @@ import { HD_MONO as MONO, HD_C as C, HD_CSS } from "./HomeDeck";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
+import { isSalesOrder, salesMonthOf, fixedSalesRows } from "./salesRule"; // 📏 2026-11-27 경리 HOME 매출도 운송 HOME · 매출관리와 같은 규칙(배차완료 + 고정거래처 · 청구월)
+import { orderProfit } from "./forkliftCore";
+import { useCompanyReceivables } from "./arLive"; // 💰 2026-11-27 미수금 한 숫자
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const kst = (off = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() + off); return d.toISOString().slice(0, 10); };
@@ -310,10 +313,21 @@ const DBadge = ({ d, today, big }) => {
 // ─────────────────────────── 경리·회계 ───────────────────────────
 // 실시간 오더는 최근 며칠뿐이라, 지난 6개월 배차완료 오더는 하루 1번 불러와 요약만 PC에 저장한다(읽기 절약).
 //  months: { "YYYY-MM": [매출, 매입, 건수] } / recent(최근 3개월): [상차일, 거래처, 청구운임, 기사운임, 차량번호, 지급상태]
-const ACCT_V = 2;
+//  📏 2026-11-27 시뮬레이션 — 경리 HOME 이번 달 매출(352만)이 운송 HOME(441만) · 매출관리와 달랐다
+//   (고정거래처 빠짐 · 상차일 달 · 매입 = 기사운임만). 이제 운송 HOME 과 같은 한 규칙:
+//   매출 = 배차완료(isSalesOrder) + 고정거래처, 달 = 청구월(salesMonthOf), 매입 = 매출 − 수익(orderProfit · 회사가 따로 지급 포함)
+//   건수는 예전처럼 상차일 달(운영 숫자). recent 는 미지급(용차) 계산용이라 상차일 그대로.
+const ACCT_V = 3;
+const acctMonthAdd = (months, r) => {
+  const m = salesMonthOf(r); if (!m) return;
+  const e = months[m] || (months[m] = [0, 0, 0]);
+  const sale = toInt(r.청구운임); e[0] += sale; e[1] += sale - orderProfit(r);
+  if (!r.__fixed) { const cm = dateOf(r).slice(0, 7); const c = months[cm] || (months[cm] = [0, 0, 0]); c[2] += 1; }
+};
 const dateOf = (r) => String(r?.상차일 || "").slice(0, 10);
 function useAcctHistory(company, dispatchData) {
   const ls = pcLiveWindowStart();
+  const fixedRows = useCompanyRows("fixedClients", company); // 📏 2026-11-27 고정거래처 매출(실시간)
   const key = `kpAcctHist:${company}`;
   const carrierF = useRouteCarrierFilter(company); // ⭐ 2026-11-05
   const read = () => { try { const c = JSON.parse(localStorage.getItem(key) || "null"); return c && c.v === ACCT_V && c.day === kst(0) && c.ls === ls ? c : null; } catch { return null; } };
@@ -323,13 +337,14 @@ function useAcctHistory(company, dispatchData) {
     if (!company) return;
     setLoading(true);
     try {
-      const snaps = await Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${ymAgo(5)}-01`), where("상차일", "<=", pcPrevDay(ls))))));
+      // 🗓 한 달 더 앞(ymAgo(6))부터 — 그 전 달 상차 · 이번 6개월 청구(이월) 오더까지 청구월로 넣는다
+      const snaps = await Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${ymAgo(6)}-01`), where("상차일", "<=", pcPrevDay(ls))))));
       const months = {}; const recent = []; const cut = `${ymAgo(2)}-01`;
       snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {}))
-        .filter((r) => (r.companyName || DEFAULT_COMPANY) === company && r.source !== "transport_transmit" && (r.배차상태 || "") === "배차완료" && carrierF.isCountable(r))
+        .filter((r) => (r.companyName || DEFAULT_COMPANY) === company && isSalesOrder(r) && carrierF.isCountable(r))
         .forEach((r) => {
-          const d = dateOf(r); const e = months[d.slice(0, 7)] || (months[d.slice(0, 7)] = [0, 0, 0]);
-          e[0] += toInt(r.청구운임); e[1] += toInt(r.기사운임); e[2] += 1;
+          const d = dateOf(r);
+          acctMonthAdd(months, r);
           if (d >= cut) recent.push([d, String(r.거래처명 || "").trim(), toInt(r.청구운임), toInt(r.기사운임), String(r.차량번호 || "").trim(), r.지급상태 || ""]);
         });
       const c = { v: ACCT_V, day: kst(0), ls, months, recent, at: Date.now(), cs: carrierF.sig };
@@ -342,13 +357,14 @@ function useAcctHistory(company, dispatchData) {
   return React.useMemo(() => {
     const months = {}; Object.entries(hist?.months || {}).forEach(([m, v]) => { months[m] = [...v]; });
     const recent = [...(hist?.recent || [])];
-    (dispatchData || []).filter((r) => dateOf(r) >= ls && (r.배차상태 || "") === "배차완료" && r.source !== "transport_transmit" && carrierF.isCountable(r)).forEach((r) => {
-      const d = dateOf(r); const e = months[d.slice(0, 7)] || (months[d.slice(0, 7)] = [0, 0, 0]);
-      e[0] += toInt(r.청구운임); e[1] += toInt(r.기사운임); e[2] += 1;
+    (dispatchData || []).filter((r) => dateOf(r) >= ls && isSalesOrder(r) && carrierF.isCountable(r)).forEach((r) => {
+      const d = dateOf(r);
+      acctMonthAdd(months, r);
       recent.push([d, String(r.거래처명 || "").trim(), toInt(r.청구운임), toInt(r.기사운임), String(r.차량번호 || "").trim(), r.지급상태 || ""]);
     });
+    fixedSalesRows(fixedRows).forEach((r) => acctMonthAdd(months, r)); // 📏 고정거래처(매출 · 매입만, 건수 0) — 운송 HOME · 매출관리와 같게
     return { months, recent, ready: !!hist, at: hist?.at || 0, loading, reload: load };
-  }, [hist, dispatchData, ls, loading, load, carrierF]);
+  }, [hist, dispatchData, ls, loading, load, carrierF, fixedRows]);
 }
 function useCompanyRows(name, company) {
   const [rows, setRows] = React.useState(null);
@@ -388,6 +404,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
   const assets = useCompanyRows("officeAssets", company);
   const users = useCol("users", company, (u) => (u.companyName || DEFAULT_COMPANY) === company);
   const H = useAcctHistory(company, dispatchData);
+  const AR = useCompanyReceivables({ company, dispatchData });
   const F = useFundsSummary(company);
   const fleetPlates = React.useMemo(() => new Set((fleet || []).map((d) => String(d.차량번호 || "").trim()).filter((p) => p && p !== "-")), [fleet]);
 
@@ -408,19 +425,10 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
   const recurTodo = recurring.filter((r) => r.active !== false && !recurDone.has(r.id));
   const lowStock = assets.filter((a) => a.category === "소모품" && toInt(a.minQty) > 0 && toInt(a.qty) <= toInt(a.minQty));
 
-  // 미수(거래처 미정산 — 지난 2개월) · 미지급(용차 지급 대기)
-  const settleSt = {}; (clients || []).forEach((c) => { settleSt[String(c.거래처명 || c.id || "").trim()] = c.정산상태 && typeof c.정산상태 === "object" ? c.정산상태 : {}; });
-  const arMonths = [ymAgo(1), ymAgo(2)];
-  const ar = {};
-  H.recent.forEach(([d, c, sale]) => {
-    const m = d.slice(0, 7); if (!arMonths.includes(m) || !c) return;
-    const s = settleSt[c]?.[m.replace("-", "")] || settleSt[c]?.[m];
-    if (s === "정산완료") return;
-    const k = `${c}|${m}`; ar[k] = ar[k] || { c, m, amt: 0, n: 0 }; ar[k].amt += sale; ar[k].n += 1;
-  });
-  const arList = Object.values(ar).sort((a, b) => b.amt - a.amt);
-  const arSum = arList.reduce((s, x) => s + x.amt, 0);
-  const arByClient = Object.values(arList.reduce((m, x) => { const g = m[x.c] || (m[x.c] = { c: x.c, amt: 0, n: 0, ms: [] }); g.amt += x.amt; g.n += x.n; g.ms.push(Number(x.m.slice(5))); return m; }, {})).sort((a, b) => b.amt - a.amt);
+  // 💰 2026-11-27 미수금 = 회계관리 · 경영 HOME · 정산 홈과 같은 한 숫자(src/arLive.js — 올해 배차완료 + 고정거래처, 부가세 포함 − 받은 돈)
+  //  예전엔 "지난 2개월 · 정산완료 표시 안 된 공급가"라 같은 날 다른 화면과 숫자가 달랐다
+  const arByClient = AR.list.map((x) => ({ c: x.client, amt: x.outstanding, n: x.count, ms: [...new Set((x.open || []).map((o) => Number(String(o.d).slice(5, 7))))] }));
+  const arSum = AR.total;
   // 용차(지입 제외) 지급 — 지난달~이번 달 · 예정(대기) / 완료
   const payRows = H.recent.filter(([d, , , buy, plate]) => d >= `${ymAgo(1)}-01` && buy > 0 && !fleetPlates.has(plate));
   const ap = payRows.filter((r) => r[5] !== "지급완료");
@@ -461,12 +469,12 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
 
       <div className="dd-kpi">
         <KTile primary code="CASH" label="보유 자금" value={F.has ? short(F.cash) : "미입력"} unit={F.has ? "원" : ""}
-          foot={F.has ? <>이번 달 수입 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(inSum)}</b> · 지출 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(outSum)}</b></> : "자금관리에서 통장 잔액 입력"}
+          foot={F.has && (F.unlinked || (F.baseDate && F.baseDate < kst(-30))) ? <span style={{ color: WARN }}>잔액 확인 필요{F.baseDate ? ` · ${Number(F.baseDate.slice(5, 7))}/${Number(F.baseDate.slice(8, 10))} 기준` : ""}{F.unlinked ? ` · 통장 미지정 ${F.unlinked}건` : ""}</span> : F.has ? <>이번 달 수입 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(inSum)}</b> · 지출 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(outSum)}</b></> : "자금관리에서 통장 잔액 입력"}
           spark={(F.monthly || []).map((x) => x.in - x.out)} />
         <KTile code="REVENUE" label="이번 달 매출" value={short(cur[0])} unit="원" foot={`${cur[2].toLocaleString()}건 · 전월 ${short(prev[0])}원`} spark={six.map((x) => x.sale)} />
         <KTile code="PAYOUT" label="매입(기사운임)" value={short(cur[1])} unit="원" foot={`전월 ${short(prev[1])}원`} spark={six.map((x) => x.buy)} />
         <KTile code="PROFIT" label="이번 달 수익" value={short(cur[0] - cur[1])} unit="원" valueColor={profitColor(cur[0] - cur[1], { dark: true })} foot={<>매익률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitRateColor(rate, { dark: true, neutral: C.hi }) }}>{rate.toFixed(1)}%</b></>} spark={six.map((x) => x.profit)} />
-        <KTile code="RECEIVABLE" label="미수금" value={short(arSum)} unit="원" warn={arSum > 0} foot={`${arByClient.length}곳 · 지난 2개월 매출의 ${pctOf(arSum, six[3].sale + six[4].sale)}%`} bar={pctOf(arSum, six[3].sale + six[4].sale)} />
+        <KTile code="RECEIVABLE" label="미수금(부가세 포함)" value={AR.ready ? short(arSum) : "…"} unit={AR.ready ? "원" : ""} warn={arSum > 0} foot={AR.ready ? `${arByClient.length}곳 · 30일 넘은 ${short(AR.over30)}원${AR.overpaidSum ? ` · 과입금 ${short(AR.overpaidSum)}원` : ""}` : "불러오는 중…"} bar={pctOf(AR.over30, arSum)} />
         <KTile code="PAYABLE" label="미지급(용차)" value={short(apSum)} unit="원" warn={apSum > 0} foot={`${ap.length}건 · 지급률 ${pctOf(paidSum, paidSum + apSum)}%`} bar={pctOf(paidSum, paidSum + apSum)} />
       </div>
 
@@ -506,12 +514,13 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
 
       <div className="dd-row r3">
         <DPanel code="RECEIVABLE" title="거래처 미수금" right={<button type="button" className="dd-link" onClick={() => onGo?.("정산관리")}>거래처 정산 ›</button>}>
-          {!H.ready ? <Muted t="불러오는 중…" /> : !arByClient.length ? <Muted t="정산 전 거래처가 없습니다" /> : (
+          {!AR.ready ? <Muted t="불러오는 중…" /> : !arByClient.length ? <Muted t="받을 돈이 남은 거래처가 없습니다" /> : (
             <>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 26, fontWeight: 800, color: "#fff" }}>{won(arSum)}</span><span style={{ fontSize: 14, color: C.dim, fontWeight: 700 }}>원 · {arByClient.length}곳</span>
               </div>
-              {arByClient.slice(0, 6).map((x) => <HBar key={x.c} l={x.c} sub={`${x.ms.sort((a, b) => a - b).join("·")}월 · ${x.n}건`} v={x.amt} max={arByClient[0].amt} right={`${short(x.amt)}원`} />)}
+              {arByClient.slice(0, 6).map((x) => <HBar key={x.c} l={x.c} sub={`${x.ms.sort((a, b) => a - b).join("·")}월분 · ${x.n}건`} v={x.amt} max={arByClient[0].amt} right={`${short(x.amt)}원`} />)}
+              {AR.overpaid.length > 0 && <div style={{ fontSize: 13, color: WARN, fontWeight: 700, marginTop: 8 }}>과입금 {AR.overpaid.slice(0, 3).map((x) => `${x.client} ${short(x.amount)}원`).join(" · ")} — 거래처 정산에서 확인해 주세요</div>}
             </>
           )}
         </DPanel>
@@ -644,7 +653,10 @@ function HrDashboard({ company, onGo, me, att }) {
   const left = staff.filter((u) => u.employmentStatus === "퇴사" && String(u.resignedAt || u.resignDate || u.퇴사일 || "").startsWith(ym));
   // 오늘 근태 — 출근기록 + 전자결재 휴가·외근(결재 완료·진행 중) + 휴직
   const attMap = Object.fromEntries((attendance || []).map((a) => [a.uid, a]));
-  const evs = approvals.flatMap(eventsOf);
+  // 🛠 2026-11-27 퇴사자의 결재 중 휴가 · 퇴사일 뒤 휴가는 부재 일정 · 집계에서 뺀다(예전엔 퇴사 처리 뒤에도 '이번 주 부재'에 남았다)
+  const leftOn = Object.fromEntries(staff.filter((u) => u.employmentStatus === "퇴사").map((u) => [u.id, String(u.resignedAt || u.resignDate || u.퇴사일 || "").slice(0, 10)]));
+  const keepLeft = (uid, date, status) => !(uid in leftOn) || (status === "approved" && !!leftOn[uid] && String(date || "") <= leftOn[uid]);
+  const evs = approvals.flatMap(eventsOf).filter((e) => keepLeft(e.uid, e.date, e.status));
   const awayMap = {}; evs.filter((e) => e.date === today && !/조퇴|지각/.test(e.label)).forEach((e) => { awayMap[e.uid] = e; });
   const stateOf = (u) => {
     const a = attMap[u.id]; const t = hm(a?.checkInTime);
@@ -666,7 +678,7 @@ function HrDashboard({ company, onGo, me, att }) {
   const noHire = active.filter((u) => !hireOf(u));
   const fleetN = drivers.filter((d) => ["지입", "직영", "임대", "분양"].includes(String(d.등급 || "").trim())).length;
   // 이번 달 연차 사용 — 승인된 휴가(시작일 기준) · 일별 부재 인원
-  const monthUse = approvals.filter((a) => a.status === "approved").map((a) => ({ a, x: leaveUseOf(a) })).filter(({ x }) => x && String(x.date).startsWith(ym));
+  const monthUse = approvals.filter((a) => a.status === "approved").map((a) => ({ a, x: leaveUseOf(a) })).filter(({ a, x }) => x && String(x.date).startsWith(ym) && keepLeft(a.drafterUid, x.date, a.status));
   const usedDays = monthUse.reduce((s, { x }) => s + x.days, 0);
   const usedBy = Object.values(monthUse.reduce((m, { a, x }) => { const k = a.drafterUid || a.drafter?.name; const g = m[k] || (m[k] = { name: a.drafter?.name || "-", team: a.drafter?.team || "", days: 0 }); g.days += x.days; return m; }, {})).sort((a, b) => b.days - a.days);
   const dim = new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();

@@ -37,6 +37,7 @@ import { COPY_GROUPS, COPY_DEFAULT, copyPatch, diffEmp, filterTargets, upsertTem
 import { isSigned, canSign, stampDate, signTimeText, signError, signPatch, clearSignPatch } from "./payslipSign";
 import { kstDay, kstYm, shiftYm, lastDayOf, safeId, slipId, runId, empId, toNum, ymLabel, blank, uniq, inp, numInp, NUMS, sec, Label, Note, H, Sel, Money, Seg, enterNext, useMedia, useCol, useDocData } from "./payrollUi";
 import { kpPrompt, kpConfirm } from "./kpDialog";
+import { useStaffHireDates } from "./hireDate";
 
 const PayrollReports = React.lazy(() => import("./PayrollReports"));
 const PayrollContracts = React.lazy(() => import("./PayrollContracts"));
@@ -117,7 +118,8 @@ function useStaff(company) {
     setRows(_staffMemo.get(company) || null);
     return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => { const v = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => isStaff(u, company)); _staffMemo.set(company, v); setRows(v); }, () => setRows([]));
   }, [company]);
-  return rows;
+  // 🗓 2026-11-27 입사일은 인사 프로필(userProfiles) 먼저 → users 순(src/hireDate.js — 인사 · 연차 화면과 같은 기준). 예전엔 users.hireDate 만 봐서 명세서 입사일이 비었다
+  return useStaffHireDates(rows);
 }
 // ⭐ 2026-11-09 회계관리에 들어오면 급여 화면 묶음 + 잠금 상태(서버)를 미리 받아 둔다 → [급여 계산] 누르면 바로 열림
 export function prefetchPayroll(company) { warmPayrollVerify(); return prefetchPayrollStatus(company).catch(() => null); }

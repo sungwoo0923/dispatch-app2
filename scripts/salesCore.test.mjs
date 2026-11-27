@@ -26,6 +26,14 @@ t("신규 가산(+3%p) · 수금 완료분만 확정", () => {
   eq(r.confirmed, b.amount); eq(r.held, a.amount); eq(r.total, a.amount + b.amount);
 });
 t("목표 초과 가속 ×1.2", () => { const base = S.calcIncentive({ orders, accounts, uid: "u1", ym }); const r = S.calcIncentive({ orders, accounts, uid: "u1", ym, target: 30000000 }); eq(r.accel, 1.2); eq(r.total, base.rows.reduce((s, x) => s + Math.round(((x.base * x.rate) / 100) * 1.2), 0)); eq(S.calcIncentive({ orders, accounts, uid: "u1", ym, target: 90000000 }).accel, 1); });
+t("기존 거래처(existing)는 신규 가산 없음 · 거래처 상태도 신규 아님", () => {
+  const acc2 = accounts.map((x) => (x.client === "A" ? { ...x, existing: true } : x));
+  const r = S.calcIncentive({ orders, accounts: acc2, uid: "u1", ym });
+  eq(r.rows.find((x) => x.client === "A").isNew, false); eq(r.newClients, 0);
+  const h = S.clientHealth({ orders, accounts: acc2, ym, today: `${ym}-20` }).find((x) => x.client === "A"); eq(h.isNew, false);
+  eq(S.isExistingClient("2026-05-28", "2026-11-27"), true); eq(S.isExistingClient("", "2026-11-27"), false); eq(S.isExistingClient("2026-11-27", "2026-11-27"), false);
+});
+t("본인 인센티브는 직접 확정 못 함", () => { eq(S.canConfirmIncentive({ uid: "m", canManage: true }, "m"), false); eq(S.canConfirmIncentive({ uid: "m", canManage: true }, "u1"), true); eq(S.canConfirmIncentive({ uid: "r", canManage: false }, "u1"), false); });
 t("수주일 전 오더는 실적 아님", () => { const r = S.calcIncentive({ orders, accounts: [{ client: "B", uid: "u1", since: `${ym}-10` }], uid: "u1", ym }); eq(r.sale, 0); eq(r.total, 0); });
 t("매출 기준 · 단일 요율 · 월 상한 · 전액 확정", () => { const r = S.calcIncentive({ orders, accounts, uid: "u1", ym, policy: { base: "revenue", useTiers: false, rate: 1, newBonus: 0, minMargin: 0, collectOnly: false, cap: 200000 } }); eq(r.base, 35000000); eq(r.capped, true); eq(r.confirmed, r.total); if (Math.abs(r.total - 200000) > 2) throw new Error(`상한 ${r.total}`); });
 t("거래처 상태 — 담당·미수", () => { const h = S.clientHealth({ orders, accounts, clients: [{ 거래처명: "D" }], ym, today: `${ym}-10` }); eq(h.find((x) => x.client === "C").rep, "박"); eq(h.find((x) => x.client === "D").state, "none"); eq(h.find((x) => x.client === "A").uid, "u1"); });

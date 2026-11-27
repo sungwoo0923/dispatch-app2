@@ -1503,22 +1503,15 @@ const getOrderCargoTotals = (order = {}) => {
 // 산재보험료
 const getSanjae = (o = {}) => o.산재보험료 ?? 0;
 
+// 🛠 2026-11-27 시 · 도 표준 약칭(충북 · 충남 · 강원 · 세종 · 전북 · 제주 …) — 예전엔 '충청북도' → '충청북', '강원특별자치도' → '강원특별자치'로 잘렸다
+const REGION_SHORT = { 충청북도: "충북", 충청남도: "충남", 전라북도: "전북", 전북특별자치도: "전북", 전라남도: "전남", 경상북도: "경북", 경상남도: "경남", 강원도: "강원", 강원특별자치도: "강원", 제주도: "제주", 제주특별자치도: "제주", 세종특별자치시: "세종", 경기도: "경기" };
+const regionShortOf = (p0 = "") => REGION_SHORT[p0] || String(p0).replace(/(특별자치시|특별자치도|특별시|광역시|자치시)$/, "").replace(/(.{2,})도$/, "$1");
 const shortAddr = (addr = "") => {
   const parts = String(addr).trim().split(/\s+/);
   if (parts.length < 2) return "";
 
   // 1️⃣ 광역단위 축약
-  let region = parts[0]
-    .replace("특별시", "")
-    .replace("광역시", "")
-    .replace("자치시", "")
-    .replace("특별자치시", "")
-    .replace("도", "");
-
-  // 🔹 경기도 → 경기
-  if (region.endsWith("도")) {
-    region = region.replace("도", "");
-  }
+  const region = regionShortOf(parts[0]);
 
   // 2️⃣ 두번째 행정단위 (시 or 구)
   const second = parts[1];
@@ -1546,7 +1539,7 @@ const shortAddr = (addr = "") => {
 const tinyAddr = (addr = "") => {
   const parts = String(addr || "").trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "";
-  const region = parts[0].replace(/(특별자치시|특별자치도|특별시|광역시|자치시|도)$/, "");
+  const region = regionShortOf(parts[0]);
   const second = parts[1] || "";
   let city = second.replace(/(특별자치시|시|군|구)$/, "");
   if (second && city.length < 2) city = second; // "서구"처럼 한 글자만 남으면 원래 표기 유지
@@ -2111,7 +2104,7 @@ const formatPhoneLive = (phone) => {
 // ⭐ 로그아웃/초기화해도 "로그인 정보 저장" 설정은 남긴다(다음 로그인 때 회사코드·회사명 자동 입력)
 const clearLocalStorageKeepLogin = () => {
   const keep = {};
-  ["transportLoginSaved", "driverLoginSaved", "kpPin", "kpAdminDev"].forEach((k) => { // 🚦 kpPin = 배포 버전(지우면 가입자가 최신 화면을 받았다)
+  ["transportLoginSaved", "driverLoginSaved", "driverLoginKeys", "kpPin", "kpAdminDev"].forEach((k) => { // 🔒 2026-11-27 driverLoginKeys = 기사 로그인 열쇠 · 🚦 kpPin = 배포 버전(지우면 가입자가 최신 화면을 받았다)
     const v = localStorage.getItem(k);
     if (v != null) keep[k] = v;
   });
@@ -6276,7 +6269,7 @@ const title =
 {!deptMode && page !== "form" && (
   <AiAssistant variant="mobile" dispatches={allOrders} clients={clients} places={places} drivers={drivers} company={userCompany || localStorage.getItem("userCompany") || ""}
     uid={user?.uid || ""} userName={myRealName || ""} screen={page} orderApi={aiOrderApiM} onNavigate={aiGoMenuM}
-    controlledOpen={aiOpenM} onOpenChange={setAiOpenM} hideLauncher={fabMerged} />
+    controlledOpen={aiOpenM} onOpenChange={setAiOpenM} hideLauncher={fabMerged || page === "detail" /* 🛠 2026-11-27 상세보기에선 ✦ 버튼이 [문자] · [기사 배차 취소]를 가려서 숨긴다(열려 있던 AI 창은 그대로) */} />
 )}
       {showMenu && (
         <MobileSideMenu
@@ -7422,6 +7415,8 @@ setOpenMemo={setOpenMemo}
     upsertDriver={upsertDriver}
   />
 )}
+        {/* 🛠 2026-11-27 목록 끝 여백 — 맨 아래 카드의 날짜 · 시간이 ✦(AI) 버튼에 가리지 않게 버튼 높이만큼 더 내려갈 수 있다 */}
+        {page === "unassigned" && <div aria-hidden style={{ height: 76 }} />}
 
         {/* ✅ 2026-11-16 월 마감(배차자 1차) — PC 배차현황 › 월 마감과 같은 기록 · 휴대폰은 카드로 */}
         {page === "monthclose" && (
@@ -8379,7 +8374,7 @@ function MobileSideMenu({
         dark ? "text-white" : "bg-white"
       }`} style={{ paddingTop: "env(safe-area-inset-top, 0px)", background: dark ? "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(170deg, #060E1F 0%, #0F1A30 45%, #1B2B4B 100%)" : undefined }}>
 
-        {dark && <KpmDrawerHead myName={myName} myId={currentUser?.email || ""} role={role} loginTime={loginTime} onClose={onClose} fmtLoginTime={fmtLoginTime} />}
+        {dark && <KpmDrawerHead myName={myName} myId={currentUser?.email || ""} role={role} isExec={isExec} loginTime={loginTime} onClose={onClose} fmtLoginTime={fmtLoginTime} />}
         {/* 헤더 */}
         {!dark && <div className={`px-5 pt-5 pb-4 flex items-start justify-between gap-3 ${
           dark ? "border-b border-white/10" : "border-b border-[#EEF1F6]"
@@ -8468,6 +8463,9 @@ function MobileSideMenu({
               <MenuItem label="영업 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
               {ok("영업관리") && <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />}
               {/* 🧹 2026-11-15 영업은 홈 · 전자결재 · 영업관리 · 회사관리만(배차현황 · 운임 · 거래처관리 · 매출관리는 PC와 같이 뺐다) */}
+              {/* 🧾 2026-11-27 견적서 작성용 단가표 · 운임조회는 PC와 같이 다시 연다 */}
+              {ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
+              {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
             </MenuSection>
           )}
           {/* 🧭 2026-11-24 화면 전환 · 업무 영역은 메뉴가 아니라 맨 위 카드(WorkspaceCard)로 · 직원 · 기사는 경리 · 인사 주업무 묶음 안으로 */}
@@ -8716,7 +8714,7 @@ function MobileSideMenu({
 // 눌러야 펼쳐지면 된다. alwaysOpen이면 펼침/접기 버튼 없이 그냥 항상 보여준다.
 // ── 메뉴 B형 머리(디지털 시계 + 프로필) · 컨트롤 카드 · 화면 크기 3단계 ──
 const KPM_ROLE_KO = { totalMaster: "최고관리자", admin: "관리자", superadmin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용" };
-function KpmDrawerHead({ myName, myId = "", role, loginTime, onClose, fmtLoginTime }) {
+function KpmDrawerHead({ myName, myId = "", role, loginTime, onClose, fmtLoginTime, isExec = false }) {
   const [showId, setShowId] = useState(false); // ⭐ 2026-11-09 누르면 아이디 ↔ 이름(기본은 이름)
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
@@ -8747,7 +8745,7 @@ function KpmDrawerHead({ myName, myId = "", role, loginTime, onClose, fmtLoginTi
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <button type="button" onClick={() => setShowId((v) => !v)} title="눌러서 이름 ↔ 계정 아이디" className="text-[14.5px] font-black truncate text-left">{showId && myId ? myId : myName}</button>
-            <span className="shrink-0 h-[18px] px-1.5 rounded-md bg-[#8FB0F0]/20 text-[#CFE0FF] text-[10px] font-black grid place-items-center">{KPM_ROLE_KO[role] || "직원"}</span>
+            <span className="shrink-0 h-[18px] px-1.5 rounded-md bg-[#8FB0F0]/20 text-[#CFE0FF] text-[10px] font-black grid place-items-center">{KPM_ROLE_KO[role] || (isExec ? "임원" : ROLE_LABELS_SW[role] || "직원") /* 🛠 2026-11-27 대표 · 임원 계정이 '직원'으로 보이던 것 */}</span>
           </div>
           <div className="text-[11px] text-white/45 truncate tabular-nums">{[co, fmtLoginTime(loginTime) && `접속 ${fmtLoginTime(loginTime)}`].filter(Boolean).join(" · ")}</div>
         </div>
@@ -13147,7 +13145,10 @@ const handleAssignClick = async () => {
     if (!carNo) { alert("차량번호를 입력해주세요."); return; }
     if (!name || !phone) {
       if (!(await kpConfirm("기사 이름 또는 연락처가 비어 있습니다. 그대로 배차하시겠습니까?"))) return;
-    } else if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // 위에서 이미 물었으면 다시 묻지 않는다
+    } else if (!(await (String(order?.차량번호 || "").trim()
+      ? kpConfirm("수정하시겠습니까?", { okText: "저장" })
+      // 🛠 2026-11-27 처음 배차면 '수정' 대신 누구에게 배차하는지 보여 준다(잘못 고른 기사를 한 번 더 거르게)
+      : kpConfirm(`${carNo} ${name} 기사로 배차할까요?`, { okText: "배차" })))) return; // 위에서 이미 물었으면 다시 묻지 않는다
     onAssignDriver({ 차량번호: carNo, 이름: name, 전화번호: phone });
   };
 
@@ -18372,7 +18373,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
   // ⭐ 2026-10-31 리디자인 — 프로그램 공통 디자인(네이비 디지털 히어로 · 영문 코드 · 카드)으로
   const ROLE_KO = { totalMaster: "최고관리자", admin: "관리자", superadmin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용" };
-  const roleKo = ROLE_KO[me?.role] || ROLE_KO[localStorage.getItem("role")] || myRole || "직원";
+  const roleKo = ROLE_KO[me?.role] || ROLE_KO[localStorage.getItem("role")] || ROLE_LABELS_SW[me?.role] || myRole || "직원";
   const team = me?.team || me?.부서 || "";
   const position = me?.position || me?.직책 || "";
   const platform = navigator.userAgent.includes("Android") ? "Android" : navigator.userAgent.includes("iPhone") ? "iOS" : "Web";
@@ -21602,7 +21603,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <div className="relative overflow-hidden rounded-[22px] text-white px-5 py-4 shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: KPM_HERO_BG }}>
           <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>SETTINGS · PREFERENCES</div>
           <div className="text-[21px] font-black tracking-tight mt-0.5">설정</div>
-          <div className="text-[12px] text-white/55 truncate">{[role === "totalMaster" ? TM_AFFIL : userCompany, ROLE_KO[role] || role, currentUser?.email].filter(Boolean).join(" · ")}</div>
+          <div className="text-[12px] text-white/55 truncate">{[role === "totalMaster" ? TM_AFFIL : userCompany, ROLE_KO[role] || ROLE_LABELS_SW[role] || role, currentUser?.email].filter(Boolean).join(" · ")}</div>
           <div className="mt-3 grid grid-cols-3 gap-1.5">
             {[["테마", cardVersionB ? "B형" : "A형"], ["글자", { 1: "기본", 1.1: "크게", 1.2: "아주 크게" }[fontScale] || "기본"], ["알림", alarmEnabled ? `켜짐 · ${pushOnCount}종` : "꺼짐"]].map(([l, v]) => (
               <div key={l} className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-2.5 py-1.5">
@@ -21655,7 +21656,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               showSuccess(ok === false ? "새로고침 실패 (네트워크 확인)" : "새로고침 완료 · 최신 상태 반영됨");
             }}
             right={go(manualRefreshing ? "갱신 중…" : "실행")} />
-          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { /* ⭐ 2026-11-02 점검 — 로그인·FCM 토큰 키는 남기고 비움(로그아웃 시 기기 알림 해제 유지) */ const keep = ["kpFcmToken", "loginCompany", "userCompany", "role", "kpHrAcctView", "transportLoginSaved", "driverLoginSaved", "kpPin", "kpAdminDev"]; const saved = keep.map((k) => [k, localStorage.getItem(k)]); localStorage.clear(); saved.forEach(([k, v]) => { if (v != null) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } } }); showSuccess("초기화 완료"); }} right={go("실행")} />
+          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { /* ⭐ 2026-11-02 점검 — 로그인·FCM 토큰 키는 남기고 비움(로그아웃 시 기기 알림 해제 유지) */ const keep = ["kpFcmToken", "loginCompany", "userCompany", "role", "kpHrAcctView", "transportLoginSaved", "driverLoginSaved", "driverLoginKeys", "kpPin", "kpAdminDev"]; const saved = keep.map((k) => [k, localStorage.getItem(k)]); localStorage.clear(); saved.forEach(([k, v]) => { if (v != null) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } } }); showSuccess("초기화 완료"); }} right={go("실행")} />
         </KpmCard>
 
         {isTotalMaster && (
@@ -21668,7 +21669,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
 
         <KpmCard en="ACCOUNT" title="계정" flush>
           <KpmRow label={role === "totalMaster" ? "소속" : "회사"} value={role === "totalMaster" ? `${TM_AFFIL} (보는 운송사: ${userCompany || "-"})` : (userCompany || "-")} />
-          <KpmRow label="권한" value={ROLE_KO[role] || role || "-"} />
+          <KpmRow label="권한" value={ROLE_KO[role] || ROLE_LABELS_SW[role] || role || "-"} />
           <KpmRow label="2차 인증 · 로그인 보안" sub="2차 인증(PIN · 키패드) · 로그인된 기기 · 비밀번호" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
           {/* ⭐ 2026-11-02 원격지원 — */}
           {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}

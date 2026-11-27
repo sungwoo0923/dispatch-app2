@@ -2,7 +2,9 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정
 import { isInsightRow, insightRange } from "../ProInsight";
-import { salesMonthOf, salesBillDateOf } from "../salesRule"; // 🗓 2026-11-25 달 = 청구월(마감월) // ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출 기준 공용
+import { salesMonthOf, salesBillDateOf, fixedSalesRows } from "../salesRule";
+import { useCompanyRows } from "../companyColStore";
+import { getTenant } from "../fsTenant"; // 🗓 2026-11-25 달 = 청구월(마감월) // ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출 기준 공용
 import { useExecPinPad, execPinTexts, EXEC_PIN_FORGOT, clearLegacyExecPin } from "../execPinApi"; // 🔐 2026-11-27 PIN 서버 확인
 import { orderProfit } from "../forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import {
@@ -114,7 +116,9 @@ export default function MobileIntelView({ dispatchData: allDispatchData = [], ca
   // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 경영인텔리전스 매출에서 뺀다
   const carrierF = useRouteCarrierFilter();
   // ⭐ 2026-11-05 PC·모바일 일치 — PC 인사이트(ProInsight)와 같은 기준: 상차일 있음 · 취소 아님 · 청구운임 > 0
-  const dispatchData = React.useMemo(() => (carrierF.filter(allDispatchData) || []).filter(isInsightRow), [allDispatchData, carrierF]);
+  // 📏 2026-11-27 고정거래처 매출도 넣는다 — PC 홈 · 경영 브리핑 · 매출관리와 같은 매출 규칙(salesRule)
+  const fixedLive = useCompanyRows("fixedClients", getTenant());
+  const dispatchData = React.useMemo(() => [...(carrierF.filter(allDispatchData) || []).filter(isInsightRow), ...fixedSalesRows(fixedLive).filter((r) => r.상차일 && Number(r.청구운임) > 0)], [allDispatchData, carrierF, fixedLive]);
   const [verified, setVerified] = useState(() => {
     return sessionStorage.getItem("exec_intel_ok") === "1";
   });

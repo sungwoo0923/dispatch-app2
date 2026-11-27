@@ -21,7 +21,7 @@ import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { fmtPhone } from "./formatInput";
 import { kpAlert, kpConfirm } from "./kpDialog";
 import { MonthPicker } from "./kpInputs";
-import { bumpForkliftPayout, setExtPayout, setExtPayAdjust } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
+import { bumpForkliftPayout, setExtPayout, setExtPayAdjust, payFundInfo } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용(특수운임 "지급 없음")
 import RouteSpecialPresets from "./RouteSpecialPresets"; // ⭐ 2026-11-18 [특수운임 적용] 팝업 › 고정노선운임 탭
 import { useRoutePresets, applyRoutePresets, planRoutePreset, itemsFromOrder, mergeItems, saveRoutePreset, routePresetIdOf, AUTO as ROUTE_AUTO, nk as routeNk, stopCount as routeStops } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
@@ -744,7 +744,10 @@ function ExtPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
     if (!target.length) return;
     const total = target.reduce((a, r) => a + (paid ? r.amount : r.paidAmt), 0);
     const date = String(payDate || kstDay()).slice(0, 10);
-    if (!(await kpConfirm(paid ? `${target.length}건 · ${won(total)}원을 지급완료로 바꿀까요?\n지급일은 ${date}예요.` : `${target.length}건 · ${won(total)}원의 지급을 취소할까요?\n장부에 들어간 지급 기록(추가 지급 · 환수 포함)도 같이 지워져요.`))) return;
+    // 💸 2026-11-27 확인창에 출금 통장도(자금관리 '기사운임 지급' 기본 통장 — 없으면 통장 잔액엔 반영 안 된다고 알려 줌)
+    const fi = paid ? await payFundInfo(db, getTenant(), "drvpay") : null;
+    const fundTxt = !fi ? "" : fi.def ? `출금 통장은 ${fi.def.name || "기본 통장"}이에요.` : "출금 통장이 정해지지 않아 장부에만 기록되고 통장 잔액은 그대로예요(자금관리 › 통장 설정 › ‘기사운임 지급’ 기본 통장).";
+    if (!(await kpConfirm(paid ? `${target.length}건 · ${won(total)}원을 지급완료로 바꿀까요?\n지급일은 ${date}예요.\n${fundTxt}\n수입·지출 장부에 지출로 기록돼요.` : `${target.length}건 · ${won(total)}원의 지급을 취소할까요?\n장부에 들어간 지급 기록(추가 지급 · 환수 포함)도 같이 지워져요.`))) return;
     // 같은 오더의 항목은 한 번에 저장(외부지급 칸을 통째로 쓴다)
     const byOrder = new Map();
     target.forEach((r) => { const e = byOrder.get(r.orderId) || { order: r.order, keys: [] }; e.keys.push(r.key); byOrder.set(r.orderId, e); });
@@ -774,7 +777,7 @@ function ExtPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
     const plan = extSettleGapPlan(r.order, r.key, kstDay());
     if (!plan) return;
     const plus = plan.gap > 0; const o = r.order || {};
-    if (!(await kpConfirm(`${plus ? "추가 지급" : "환수 처리"}할까요?\n${r.to} · ${r.name} · ${o.상차일 || ""}\n지급한 돈 ${won(r.paidAmt)}원 → 지금 금액 ${won(r.amount)}원\n${plus ? `${won(plan.gap)}원을 더 드린 것으로` : `${won(-plan.gap)}원을 돌려받은 것으로`} 장부에 남겨요.`, { title: plus ? "추가 지급" : "환수 처리", okText: "네", cancelText: "취소" }))) return;
+    if (!(await kpConfirm(`${plus ? "추가 지급" : "환수 처리"}할까요?\n${r.to} · ${r.name} · ${o.상차일 || ""}\n지급한 돈 ${won(r.paidAmt)}원 → 지금 금액 ${won(r.amount)}원\n${plus ? `${won(plan.gap)}원을 더 드린 것으로` : `${won(-plan.gap)}원을 돌려받은 것으로`} 장부에 남겨요.\n장부 날짜 ${plan.ledger?.date || kstDay()}`, { title: plus ? "추가 지급" : "환수 처리", okText: "네", cancelText: "취소" }))) return;
     setBusy(true);
     try {
       const ok = await patchDispatch(r.orderId, { ...plan.patch, __system: true });

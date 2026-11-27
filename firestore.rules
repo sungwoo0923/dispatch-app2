@@ -534,9 +534,10 @@ service cloud.firestore {
     //  아래 update 조건(조회전용 아닌 그 회사 직원 + 기능 켜짐 + companyName 유지) 그대로 통과 → 규칙 변경 없음
     match /fareRules/{co} {
       allow read: if fareRulesStaff(co);
-      allow create: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+      // 🔒 2026-11-27 영업 · 인사 · 법무 · 개발 역할은 보기만(기사운임을 바꾸는 설정 — 영업관리자가 규칙을 추가 · 수정하던 것). 화면 src/fareRules.js FARE_RULE_READONLY_ROLES 와 같음
+      allow create: if fareRulesStaff(co) && !(myRole() in ['viewer', 'salesMgr', 'salesStaff', 'hrManager', 'hrStaff', 'legalMgr', 'legalStaff', 'devMgr', 'devStaff']) && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
-      allow update: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+      allow update: if fareRulesStaff(co) && !(myRole() in ['viewer', 'salesMgr', 'salesStaff', 'hrManager', 'hrStaff', 'legalMgr', 'legalStaff', 'devMgr', 'devStaff']) && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
       allow delete: if fareRulesStaff(co) && isCompanyAdmin(co);
     }
@@ -567,9 +568,13 @@ service cloud.firestore {
       allow read: if (resource == null && isApproved())
         || (coMatch(resource.data) && (resource.data.get('uid', '') == request.auth.uid
           || myRole() in ['test', 'acctStaff', 'hrAcct'] || salesAdmin()));
-      allow create: if coCreate() && salesAdmin();
-      allow update: if coMatch(resource.data) && coKeep() && salesAdmin();
-      allow delete: if coMatch(resource.data) && salesAdmin();
+      // 🔒 2026-11-27 자기 결재 막기 — 본인 인센티브(uid == 나)는 확정 · 지급 완료 · 삭제를 못 한다(다른 영업 관리 권한자 · 최고관리자만)
+      allow create: if coCreate() && salesAdmin()
+        && (isTotalMasterUser() || request.resource.data.get('uid', '') != request.auth.uid);
+      allow update: if coMatch(resource.data) && coKeep() && salesAdmin()
+        && (isTotalMasterUser() || (resource.data.get('uid', '') != request.auth.uid && request.resource.data.get('uid', '') != request.auth.uid));
+      allow delete: if coMatch(resource.data) && salesAdmin()
+        && (isTotalMasterUser() || resource.data.get('uid', '') != request.auth.uid);
     }
     // 🔒 회사 데이터(거래처·하차지·정기오더·삭제기록·알림·일정·메일·인사·근태신청·회계·결재선 · 2026-11-07 arDesk 거래명세서 단계·미수금 메모)
     // ⭐ 2026-11-02 점검 — approvalSettings(결재 설정)는 아래 전자결재 쪽 전용 규칙으로 옮김(누구나 임원 자동 승인을 켜던 문제)

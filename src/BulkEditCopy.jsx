@@ -10,6 +10,7 @@
 //  · 일괄복사: 오더마다 상차일·하차일·시간·복사 횟수(연속 N일 / 평일만)를 정해 한 번에 새 오더로 등록.
 //    등록은 오더 복사 패널의 [복사 등록]과 같은 함수(onCopyOne = submitCopyOrderPC).
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import { createPortal } from "react-dom";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
@@ -634,7 +635,9 @@ function CopyTab({ rows, onCopyOne, onClose, isViewer, toast }) {
   const [keepDriver, setKeepDriver] = React.useState(false);
   const [plans, setPlans] = React.useState(() => rows.map((r) => {
     const gap = dayGap(r.상차일, r.하차일);
-    const p = addDays(today, 1);
+    // 🛠 2026-11-27 기본 날짜 = 원본 상차일 다음 날(원본이 지난 날짜면 내일) — 예전엔 늘 '내일'이라 내일 오더를 복사하면 같은 날 중복 오더가 생기기 쉬웠다
+    const base = r.상차일 && r.상차일 >= today ? r.상차일 : today;
+    const p = addDays(base, 1);
     return { id: idOf(r), 상차일: p, 하차일: addDays(p, gap), gap, 상차시간: r.상차시간 || "", 상차시간기준: r.상차시간기준 || "", 하차시간: r.하차시간 || "", 하차시간기준: r.하차시간기준 || "", count: 1, weekdaysOnly: false, on: true };
   }));
   const [busy, setBusy] = React.useState(null); // { done, total }
@@ -666,7 +669,7 @@ function CopyTab({ rows, onCopyOne, onClose, isViewer, toast }) {
     if (isViewer || !expanded.length) return;
     if (past) { window.alert("오늘보다 이전 날짜로는 복사할 수 없어요. 날짜를 확인해 주세요."); return; }
     if (reversed) { window.alert("하차일이 상차일보다 빠른 복사본이 있어요."); return; }
-    if (!window.confirm(`총 ${expanded.length}건을 새 오더로 등록할까요?`)) return;
+    if (!(await kpConfirm(`총 ${expanded.length}건을 새 오더로 등록할까요?`, { title: "일괄복사", okText: "복사 등록" }))) return; // 🛠 2026-11-27 브라우저 기본 창 → 프로그램 확인창
     setBusy({ done: 0, total: expanded.length });
     let ok = 0;
     try {

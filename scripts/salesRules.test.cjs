@@ -33,6 +33,7 @@ const USERS = {
     await setDoc(doc(db, "salesPlans", A), { companyName: A, policy: { base: "profit" }, targets: {} });
     await setDoc(doc(db, "salesIncentives", `${A}_2026-11_rep`), { companyName: A, ym: "2026-11", uid: "rep", amount: 100000, status: "확정" });
     await setDoc(doc(db, "salesIncentives", `${A}_2026-11_rep2`), { companyName: A, ym: "2026-11", uid: "rep2", amount: 200000, status: "확정" });
+    await setDoc(doc(db, "salesIncentives", `${A}_2026-11_mgrSaved`), { companyName: A, ym: "2026-11", uid: "mgr", amount: 300000, status: "확정" });
   });
   const as = (uid) => env.authenticatedContext(uid).firestore();
   const anon = () => env.unauthenticatedContext().firestore();
@@ -84,6 +85,9 @@ const USERS = {
   await t("확정 — 영업관리자 회사 전체 목록", () => assertSucceeds(getDocs(query(collection(as("mgr"), "salesIncentives"), where("companyName", "==", A)))));
   await t("확정 — 경리 읽기(지급 확인)", () => assertSucceeds(getDoc(doc(as("acct"), "salesIncentives", `${A}_2026-11_rep2`))));
   await t("확정 — 일반 직원 읽기 막힘", () => assertFails(getDoc(doc(as("user"), "salesIncentives", `${A}_2026-11_rep2`))));
+  await t("확정 — 영업관리자 본인 것 확정 막힘(자기 결재)", () => assertFails(setDoc(doc(as("mgr"), "salesIncentives", `${A}_2026-11_mgr`), { companyName: A, ym: "2026-11", uid: "mgr", amount: 1, status: "확정" })));
+  await t("확정 — 영업관리자 본인 것 지급 완료 막힘", () => assertFails(updateDoc(doc(as("mgr"), "salesIncentives", `${A}_2026-11_mgrSaved`), { status: "지급완료" })));
+  await t("확정 — 임원이 영업관리자 것 확정", () => assertSucceeds(setDoc(doc(as("exec"), "salesIncentives", `${A}_2026-10_mgr`), { companyName: A, ym: "2026-10", uid: "mgr", amount: 1, status: "확정" })));
   await t("확정 — 다른 회사 읽기 막힘", () => assertFails(getDoc(doc(as("other"), "salesIncentives", `${A}_2026-11_rep`))));
 
   await env.cleanup();
