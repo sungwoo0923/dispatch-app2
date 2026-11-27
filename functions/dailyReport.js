@@ -89,6 +89,8 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
     const byDay = {}; const byBill = {}; // byBill[청구일] = 매출(청구월 안의 날짜 · 이월은 1일 — 화면 dailyReportCore 와 같다)
     const P = await import("./profitCore.mjs"); // ⭐ 2026-11-17 화면과 같은 수익 식
     const SR = await import("./salesRule.mjs"); // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료) — 화면과 같은 파일
+    // 🗓 2026-11-27 거래처별 마감일(25일 마감 → 10/26 ~ 11/25) — 화면과 같은 청구월로 묶으려면 계산 전에 넣는다(arCore 한 곳)
+    { const A = await import("./arCore.mjs"); const cs = await db.collection("clients").where("companyName", "==", co).get().catch(() => null); A.setClientCloseDays(co, (cs?.docs || []).map((x) => x.data() || {})); }
     rows.forEach((r) => {
       if (r.source === "transport_transmit" || isCancelled(r) || !countable(r)) return;
       const d = dateOf(r); if (!d) return;

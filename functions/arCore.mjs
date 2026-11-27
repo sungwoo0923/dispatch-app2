@@ -22,10 +22,61 @@ const dayDiff = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(
 const dateOf = (r) => String(r?.상차일 || r?.날짜 || "").slice(0, 10);
 const normPlate = (s) => String(s ?? "").replace(/\s+/g, "").toUpperCase();
 
-// ── 🗓 2026-11-25 청구월 기준 하나로 — 마감월(있으면) · 없으면 상차일의 달 ──
+// ── 🗓 2026-11-25 청구월 기준 하나로 — 마감월(있으면) · 거래처 마감일(2026-11-27) · 없으면 상차일의 달 ──
 //  정산 홈 · 청구 현황판 · 월 마감 · 최종마감 잠금 · 거래명세서 · 미수금 · 은행 입금 매칭 · 회계 매출 월이 모두 이 식을 쓴다
 //  (src/settleCore.js 가 다시 내보냄 — 정의는 여기 한 곳). 예) 상차 10/31 · 마감월 2026-11 → 11월분
-export const monthOf = (o) => String(o?.마감월 || "").slice(0, 7) || String(o?.상차일 || o?.날짜 || "").slice(0, 7);
+// ── 🗓 2026-11-27 거래처별 마감일(업체 문의 — "업체마다 마감일이 달라요, 25일 마감이면 10/26 ~ 11/25로") ──
+//  · 거래처 정보 마감일(1 ~ 28, 비우면 말일) · 마감시작월(이 청구월부터 적용 "YYYY-MM")
+//  · 25일 마감: 11월분 = 10/26 ~ 11/25 · 12월분 = 11/26 ~ 12/25 (25일 오더가 두 달에 겹치지 않게 시작은 26일)
+//  · 시작월 전 오더는 예전처럼 상차일의 달 그대로 — 이미 정산한 달이 흔들리지 않는다
+//    첫 달(시작월)은 1일 ~ 마감일(예: 시작 11월 · 25일 → 11월분 11/1 ~ 11/25, 11/26부터 12월분)
+//  · 회사마다 따로 기억(setClientCloseDays) — 화면은 거래처 목록을 받을 때, 서버(은행 입금 매칭 · 일일 보고 · AI 비서)는 계산 전에 넣는다
+//  · 오더에 마감월이 직접 적혀 있으면(이월) 그것이 먼저
+const CLOSE_RULES = new Map(); // 회사 → Map(거래처명 → { day, from })
+let CLOSE_CUR = "";
+let CLOSE_VER = 0;
+const ymAdd = (ym, k) => { const [y, m] = ym.split("-").map(Number); const t = y * 12 + (m - 1) + k; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; };
+const ymLastDay = (ym) => { const [y, m] = ym.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
+export function normCloseRule(day, from) {
+  const d = parseInt(String(day ?? "").replace(/[^\d]/g, ""), 10);
+  if (!(d >= 1 && d <= 28)) return null;
+  return { day: d, from: /^\d{4}-\d{2}$/.test(String(from || "")) ? String(from) : "" };
+}
+// clients: [{ 거래처명, 마감일, 마감시작월 }] — 마감일이 없는(말일) 거래처는 빠진다
+export function setClientCloseDays(company, clients) {
+  const m = new Map();
+  (clients || []).forEach((c) => { const r = normCloseRule(c?.마감일, c?.마감시작월); const name = String(c?.거래처명 || c?.업체명 || "").trim(); if (r && name) m.set(name, r); });
+  const co = String(company || "");
+  const before = JSON.stringify([...(CLOSE_RULES.get(co) || new Map())]);
+  CLOSE_RULES.set(co, m); CLOSE_CUR = co;
+  if (before !== JSON.stringify([...m])) CLOSE_VER += 1;
+  return m;
+}
+export const closeRulesVersion = () => CLOSE_VER;
+export const closeRuleOf = (client, company) => {
+  const c = String(client || "").trim(); if (!c) return null;
+  return (company && CLOSE_RULES.get(String(company))?.get(c)) || CLOSE_RULES.get(CLOSE_CUR)?.get(c) || null;
+};
+// 날짜(YYYY-MM-DD) → 그 거래처 규칙으로 몇 월분인지
+export function closeYmOf(date, rule) {
+  const d = String(date || "").slice(0, 10); const ym = d.slice(0, 7);
+  if (!rule || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return ym;
+  if (rule.from && ym < rule.from) return ym;
+  return Number(d.slice(8, 10)) > rule.day ? ymAdd(ym, 1) : ym;
+}
+// 청구월(ym)의 기간 { from: "YYYY-MM-DD", to } — 규칙이 없으면 1일 ~ 말일
+export function closePeriodOf(ym, rule) {
+  const cal = { from: `${ym}-01`, to: `${ym}-${String(ymLastDay(ym)).padStart(2, "0")}`, day: 0 };
+  if (!rule || (rule.from && ym < rule.from)) return cal;
+  const to = `${ym}-${String(Math.min(rule.day, ymLastDay(ym))).padStart(2, "0")}`;
+  if (rule.from && ym === rule.from) return { from: `${ym}-01`, to, day: rule.day, first: true };
+  const p = ymAdd(ym, -1); const sd = rule.day + 1;
+  const from = sd > ymLastDay(p) ? `${ym}-01` : `${p}-${String(sd).padStart(2, "0")}`;
+  return { from, to, day: rule.day };
+}
+// 화면 · 서버 공통 — 거래처의 청구월 기간(거래처 이름으로)
+export const clientPeriodOf = (client, ym, company) => closePeriodOf(ym, closeRuleOf(client, company));
+export const monthOf = (o) => String(o?.마감월 || "").slice(0, 7) || closeYmOf(String(o?.상차일 || o?.날짜 || "").slice(0, 10), closeRuleOf(o?.거래처명, o?.companyName)) || String(o?.상차일 || o?.날짜 || "").slice(0, 7);
 // 예전(상차일 달) 키 — 정산상태 · 정산일은 예전에 상차일 달로 저장됐다. 마감월이 다른(이월) 오더만 예전 키를 같이 본다
 export const loadYmOf = (o) => String(o?.상차일 || o?.날짜 || "").slice(0, 7);
 export function isSettledIn(r, ym) {
