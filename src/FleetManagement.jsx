@@ -22,6 +22,7 @@ import { sendText } from "./smsSend"; // 💬 2026-11-10 PC 문자 보내기 // 
 import { DriverGuideSendModal, guideSentLabel } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { kpConfirm } from "./kpDialog";
+import { useExecPinPad, execPinTexts, EXEC_PIN_FORGOT } from "./execPinApi"; // 🔐 2026-11-27 완전 삭제 PIN 서버 확인
 import { createPortal } from "react-dom";
 import { imeFocusRef } from "./imeFocus";
 import { useSubnavTarget } from "./navMenus";
@@ -197,9 +198,7 @@ function sfSet(key, val) {
   } catch {}
 }
 
-// ─── 모듈 레벨 PIN 상태 (F5 새로고침 시 초기화, 탭 전환 시 유지) ──────────────
-let _fleetPinVerified = false;
-const FLEET_PIN_KEY = "exec_intel_pin_v1"; // 경영인텔리전스와 동일 PIN
+// 🔐 2026-11-27 완전 삭제 PIN 은 서버에서 확인(functions/execPin.js · src/execPinApi.js) — 예전 기기 저장 PIN(exec_intel_pin_v1)은 안 쓴다
 
 // ─── 역지오코딩 캐시 (Nominatim) ─────────────────────────────────────────────
 const _geoCache = new Map();
@@ -335,153 +334,51 @@ function StatusBadge({ status, size = 9 }) {
   );
 }
 
-// ─── FleetPinGate ────────────────────────────────────────────────────────────
-
-function FleetPinGate({ onVerified }) {
-  const hasPin = !!localStorage.getItem(FLEET_PIN_KEY);
-  const [mode, setMode] = React.useState(hasPin ? "verify" : "setup1");
-  const [entered, setEntered] = React.useState("");
-  const [firstPin, setFirstPin] = React.useState("");
-  const [error, setError] = React.useState("");
-  const [animKey, setAnimKey] = React.useState(0);
-
-  const bump = () => { setAnimKey(k => k + 1); setEntered(""); setError(""); };
-
-  const handleKey = (d) => {
-    if (d === "back") { setEntered(p => p.slice(0, -1)); return; }
-    if (entered.length >= 6) return;
-    const next = entered + d;
-    setEntered(next);
-    if (next.length < 6) return;
-    setTimeout(() => {
-      if (mode === "verify") {
-        if (next === localStorage.getItem(FLEET_PIN_KEY)) onVerified();
-        else { setError("비밀번호가 올바르지 않습니다"); bump(); }
-      } else if (mode === "setup1") {
-        setFirstPin(next); setEntered(""); setMode("setup2");
-      } else if (mode === "setup2") {
-        if (next === firstPin) { localStorage.setItem(FLEET_PIN_KEY, next); onVerified(); }
-        else { setError("비밀번호가 일치하지 않습니다"); setFirstPin(""); setMode("setup1"); bump(); }
-      }
-    }, 200);
-  };
-
-  const heading = mode === "verify" ? "보안 인증" : mode === "setup1" ? "비밀번호 설정" : "비밀번호 확인";
-  const sub = mode === "verify" ? "지입차 관제 시스템: 6자리 비밀번호" :
-    mode === "setup1" ? "사용할 6자리 비밀번호를 입력하세요" : "비밀번호를 한 번 더 입력하여 확인하세요";
-
-  return (
-    <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f4f6f9", borderRadius: 12 }}>
-      <div style={{ background: "white", borderRadius: 20, boxShadow: "0 4px 24px rgba(27,43,75,.12)", padding: "40px 44px", width: 340 }}>
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ width: 58, height: 58, background: NAVY, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8Z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
-            </svg>
-          </div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: "0.2em", color: "#5B6B85", marginBottom: 6, textTransform: "uppercase" }}>FLEET MANAGEMENT</div>
-          <div style={{ fontSize: 20, fontWeight: 900, color: NAVY }}>{heading}</div>
-          <div style={{ fontSize: 15, color: "#5B6B85", marginTop: 6 }}>{sub}</div>
-        </div>
-        <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 20 }}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", background: i < entered.length ? NAVY : "white", border: `2px solid ${i < entered.length ? NAVY : "#d1d5db"}`, transition: "all .15s" }} />
-          ))}
-        </div>
-        {error && <div style={{ textAlign: "center", fontSize: 14, fontWeight: 600, color: "#ef4444", background: "#fef2f2", borderRadius: 8, padding: "8px 12px", marginBottom: 14 }}>{error}</div>}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-          {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
-            <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
-              style={{ height: 52, borderRadius: 12, border: "1px solid #e5e7eb", background: d === "←" ? "#f3f4f6" : "#f8f9fb", color: d === "←" ? "#5B6B85" : NAVY, fontSize: d === "←" ? 15 : 18, fontWeight: 600, cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, fontFamily: "inherit" }}
-            >{d}</button>
-          ))}
-        </div>
-        {mode === "verify" && (
-          <button onClick={() => { localStorage.removeItem(FLEET_PIN_KEY); setMode("setup1"); setEntered(""); setError(""); setFirstPin(""); }}
-            style={{ width: "100%", marginTop: 16, textAlign: "center", fontSize: 14, color: "#5B6B85", background: "none", border: "none", cursor: "pointer" }}>
-            비밀번호를 잊으셨나요? 재설정
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── PinConfirmModal ──────────────────────────────────────────────────────────
-// Handles three scenarios:
-//   "setup1"→"setup2" : no PIN stored yet (first time on this device/browser)
-//   "pin"             : PIN exists — verify it
-//   "confirm"         : PIN verified — show final "완전 삭제" confirmation
+// 🔐 2026-11-27 PIN 확인은 서버(인사이트와 같은 사람별 PIN · 5번 틀리면 잠김) → 맞으면 마지막 "완전 삭제" 확인
+//   서버에 PIN 이 없으면(처음 · 관리자가 초기화) 여기서 새로 정한다 · 예전 [재설정](누구나 새 번호)은 뺐다
+//   (쓰는 곳 없던 FleetPinGate 는 지웠다)
 
 function PinConfirmModal({ onConfirmed, onCancel, title = "삭제 확인" }) {
-  const hasPin = !!localStorage.getItem(FLEET_PIN_KEY);
-  const [stage, setStage] = React.useState(hasPin ? "pin" : "setup1");
-  const [entered, setEntered] = React.useState("");
-  const [firstPin, setFirstPin] = React.useState("");
-  const [error, setError] = React.useState("");
-  const [animKey, setAnimKey] = React.useState(0);
-
-  const bump = (msg) => { setError(msg); setAnimKey(k => k + 1); setEntered(""); };
-
-  const handleKey = (d) => {
-    if (d === "back") { setEntered(p => p.slice(0, -1)); return; }
-    if (entered.length >= 6) return;
-    const next = entered + d;
-    setEntered(next);
-    if (next.length < 6) return;
-    setTimeout(() => {
-      if (stage === "pin") {
-        if (next === localStorage.getItem(FLEET_PIN_KEY)) {
-          setStage("confirm"); setEntered(""); setError("");
-        } else {
-          bump("비밀번호가 올바르지 않습니다");
-        }
-      } else if (stage === "setup1") {
-        setFirstPin(next); setEntered(""); setError(""); setStage("setup2");
-      } else if (stage === "setup2") {
-        if (next === firstPin) {
-          localStorage.setItem(FLEET_PIN_KEY, next);
-          setStage("confirm"); setEntered(""); setError("");
-        } else {
-          setFirstPin(""); setStage("setup1");
-          bump("비밀번호가 일치하지 않습니다. 다시 입력하세요");
-        }
-      }
-    }, 200);
-  };
-
-  const dotColor = stage === "setup2" ? "#3b82f6" : "#ef4444";
-
-  const subText = {
-    pin: "비밀번호를 입력하세요",
-    setup1: "이 기기에 등록된 비밀번호가 없습니다.\n사용할 6자리 비밀번호를 설정하세요",
-    setup2: "비밀번호를 한 번 더 입력하세요",
-  }[stage];
+  const [ok, setOk] = React.useState(false);
+  const pad = useExecPinPad({ onVerified: () => setOk(true) });
+  const { phase, entered, error, info, busy, locked, animKey, length } = pad;
+  const [heading, sub] = execPinTexts(phase, { verifyTitle: title });
+  const showPad = phase === "verify" || phase === "setup1" || phase === "setup2";
+  const setupLike = phase === "setup1" || phase === "setup2";
+  const dotColor = phase === "setup2" ? "#3b82f6" : "#ef4444";
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "white", borderRadius: 16, padding: "32px 36px", width: 320, boxShadow: "0 8px 32px rgba(0,0,0,.2)" }}>
-        {stage !== "confirm" ? (
+        {!ok ? (
           <>
             <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: stage === "pin" ? "#ef4444" : "#3b82f6", marginBottom: 6 }}>
-                {stage === "pin" ? title : "비밀번호 설정"}
+              <div style={{ fontSize: 16, fontWeight: 800, color: setupLike ? "#3b82f6" : "#ef4444", marginBottom: 6 }}>{heading}</div>
+              <div style={{ fontSize: 15, color: "#5B6B85", whiteSpace: "pre-line" }}>{busy ? "확인하는 중…" : sub}</div>
+            </div>
+            {showPad && (
+              <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
+                {Array.from({ length }).map((_, i) => (
+                  <div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: i < entered.length ? dotColor : "white", border: `2px solid ${i < entered.length ? dotColor : "#d1d5db"}`, transition: "all .15s" }} />
+                ))}
               </div>
-              <div style={{ fontSize: 15, color: "#5B6B85", whiteSpace: "pre-line" }}>{subText}</div>
-            </div>
-            <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: i < entered.length ? dotColor : "white", border: `2px solid ${i < entered.length ? dotColor : "#d1d5db"}`, transition: "all .15s" }} />
-              ))}
-            </div>
+            )}
+            {info && !error && <div style={{ textAlign: "center", fontSize: 13.5, color: "#1B2B4B", background: "#EEF3FC", borderRadius: 8, padding: "8px 10px", marginBottom: 12 }}>{info}</div>}
             {error && <div style={{ textAlign: "center", fontSize: 14, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-              {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
-                <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
-                  style={{ height: 46, borderRadius: 10, border: "1px solid #e5e7eb", background: d === "←" ? "#f3f4f6" : "#f8f9fb", color: "#374151", fontSize: d === "←" ? 14 : 17, fontWeight: 600, cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, fontFamily: "inherit" }}
-                >{d}</button>
-              ))}
-            </div>
+            {phase === "netError" && (
+              <button onClick={pad.retry} style={{ width: "100%", padding: "11px", borderRadius: 10, border: "none", background: NAVY, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 4 }}>다시 시도</button>
+            )}
+            {showPad && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, opacity: busy || locked ? 0.5 : 1 }}>
+                {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
+                  <button key={i} onClick={() => d !== null && pad.press(d === "←" ? "back" : String(d))} disabled={d === null || busy || !!locked}
+                    style={{ height: 46, borderRadius: 10, border: "1px solid #e5e7eb", background: d === "←" ? "#f3f4f6" : "#f8f9fb", color: "#374151", fontSize: d === "←" ? 14 : 17, fontWeight: 600, cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, fontFamily: "inherit" }}
+                  >{d}</button>
+                ))}
+              </div>
+            )}
+            {phase === "verify" && <div style={{ marginTop: 12, textAlign: "center", fontSize: 12.5, color: "#7A879C", lineHeight: 1.5 }}>{EXEC_PIN_FORGOT}</div>}
             <button onClick={onCancel} style={{ width: "100%", marginTop: 14, padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", color: "#5B6B85", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>취소</button>
           </>
         ) : (

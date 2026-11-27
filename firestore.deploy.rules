@@ -1802,6 +1802,12 @@ service cloud.firestore {
       allow read, create, update: if false;
       allow delete: if isTotalMasterUser();
     }
+    match /execPins/{uid} {
+      allow read, write: if false;
+    }
+    match /execPinAttempts/{uid} {
+      allow read, write: if false;
+    }
     match /privateFareUnlocks/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow create, update: if false;
@@ -2391,6 +2397,7 @@ service cloud.firestore {
         'payrollSecrets', 'payrollUnlocks', 'payrollPwAttempts',
         'privateFareSettings',
         'privateFareGrants', 'privateFarePins', 'privateFarePinAttempts', 'privateFareUnlocks', 'privateFareVaults',
+        'execPins', 'execPinAttempts',
         'aiTeamLogs',
         'dailyReportPrefs', 'dailyReportCompany', 'dailyReportLogs',
         'scanLearn', 'scanUsage',

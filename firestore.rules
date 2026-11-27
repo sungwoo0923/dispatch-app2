@@ -2312,6 +2312,15 @@ service cloud.firestore {
       allow read, create, update: if false;
       allow delete: if isTotalMasterUser();
     }
+    // 🔐 2026-11-27 인사이트(모바일) · 지입차관리 완전 삭제 PIN(사람별) — 서버만(functions/execPin.js)
+    //  execPins/{uid} = { uid, companyName, salt, hash(scrypt) } · execPinAttempts/{uid} = 틀린 횟수 · 잠금
+    //  화면은 읽기 · 쓰기 모두 못 한다(초기화도 서버 함수 execPinReset — 같은 회사 마스터 · 관리자 · 최고관리자)
+    match /execPins/{uid} {
+      allow read, write: if false;
+    }
+    match /execPinAttempts/{uid} {
+      allow read, write: if false;
+    }
     match /privateFareUnlocks/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow create, update: if false;
@@ -3029,6 +3038,8 @@ service cloud.firestore {
         'privateFareSettings',
         // 🔐 2026-11-18 비공개 운임(사람별 금고 · 지정 · 비밀번호 · 잠금 해제) — 위에서 따로 정함
         'privateFareGrants', 'privateFarePins', 'privateFarePinAttempts', 'privateFareUnlocks', 'privateFareVaults',
+        // 🔐 2026-11-27 인사이트 · 지입차관리 PIN(서버만 — functions/execPin.js)
+        'execPins', 'execPinAttempts',
         // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
         'aiTeamLogs',
         // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함
