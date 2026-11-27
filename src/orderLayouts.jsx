@@ -141,22 +141,18 @@ const K_AREAS = [
   r24(["k1", 24], ["cal", 1]),
   r24(["hc", 8], ["ho", 8], ["he", 8], ["cal", 1]),
   r24(["cargo", 8], ["opt", 8], ["lm", 4], ["um", 4], ["cal", 1]),
-  r24(["vk", 8], ["opt", 8], ["pay", 8], ["cal", 1]),
-  r24(["ton", 8], ["opt", 8], ["way", 8], ["cal", 1]),
-  r24(["kx", 8], ["opt", 8], ["closeym", 8], ["cal", 1]),
+  r24(["vk", 8], ["opt", 8], ["pay", 4], ["way", 4], ["cal", 1]),
+  r24(["ton", 8], ["opt", 8], ["closeym", 8], ["cal", 1]),
   r24(["k2", 25]),
   r24(["hs", 8], ["hf", 8], ["hm", 9]),
-  r24(["ss", 8], ["fsale", 8], ["memo", 9]),
-  r24(["plate", 8], ["fdrv", 8], ["memo", 9]),
-  r24(["dname", 8], ["ffee", 8], ["memo", 9]),
-  r24(["dphone", 8], ["fx", 8], ["memo", 9]),
+  r24(["ss", 4], ["plate", 4], ["fsale", 4], ["fdrv", 4], ["memo", 9]),
+  r24(["dname", 4], ["dphone", 4], ["ffee", 8], ["memo", 9]),
 ];
 export function routeGrid(hiddenKeys, skin = "route") {
   if (skin === "k") {
-    // 화면이 좁으면(1600px 이하) 위 줄을 두 줄로 — 상차 일시 아래 하차 일시(거래처 칸이 눌리지 않게)
-    const narrow = [r24(["cli", 12], ["pdate", 4], ["ptime", 9]), r24(["kb", 12], ["ddate", 4], ["dtime", 9]), ...K_AREAS.slice(1)];
-    return { css: `${A("k")}{grid-template-areas:${K_AREAS.map((r) => `"${r}"`).join(" ")}!important}
-@media (max-width:1600px){${A("k")}{grid-template-areas:${narrow.map((r) => `"${r}"`).join(" ")}!important;grid-template-rows:auto auto 10px repeat(4,auto) 10px repeat(5,auto) 10px!important}.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="dtime"]{zoom:1!important}}`, mid: false };
+    // 🎨 2026-11-27 위 줄은 늘 두 줄 — 상차 일시 아래 하차 일시(시간 · 이전/이후가 커져도 겹치지 않게)
+    const rows = [r24(["cli", 11], ["pdate", 3], ["ptime", 7], ["ddate", 3], ["dtime", 1]), ...K_AREAS.slice(1)];
+    return { css: `${A("k")}{grid-template-areas:${rows.map((r) => `"${r}"`).join(" ")}!important}`, mid: false };
   }
   const off = new Set([...(hiddenKeys || [])].map((k) => FIELD_TAG[k]).filter(Boolean));
   const rows = [];
@@ -328,7 +324,10 @@ ${area("deck", [...ALL.filter((n) => n !== "md"), "closeym"])}
 /* ═══════ K 카드형(사용자 확정 2026-11-27) — 24칸 + 달력 칸 · 카드 바탕 · 카드 제목 · 박스형 입력칸 ═══════ */
 .of-skin-k{display:block!important}
 .of-skin-k .kp-order-card{border:0!important;box-shadow:none!important;background:transparent!important;overflow:visible!important}
-${A("k")}{grid-template-columns:repeat(24,minmax(0,1fr)) 340px!important;column-gap:32px!important;row-gap:12px!important;grid-template-rows:auto 10px repeat(4,auto) 10px repeat(5,auto) 10px!important;grid-auto-rows:auto;background:#F8FAFD!important;border:1px solid #E1E7F0!important;border-radius:20px!important;padding:18px 24px 22px!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 18px 40px rgba(16,24,40,.07)!important;overflow:visible!important}
+${A("k")}{grid-template-columns:repeat(24,minmax(0,1fr)) 340px!important;column-gap:24px!important;row-gap:8px!important;grid-template-rows:auto 6px repeat(4,auto) 6px repeat(4,auto) 6px repeat(3,auto)!important;grid-auto-rows:auto;background:#F8FAFD!important;border:1px solid #E1E7F0!important;border-radius:18px!important;padding:14px 22px 18px!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 18px 40px rgba(16,24,40,.07)!important;overflow:visible!important}
+.of-lay-k .kp-order-form > [data-of] label{margin-bottom:3px!important}
+.of-lay-k .kp-order-form input:not([type=checkbox]):not([type=radio]){min-height:34px!important;height:34px!important}
+.of-lay-k .kp-order-form textarea{min-height:64px!important}
 ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate", "ptime", "ddate", "dtime", "pq", "dq", "sw", "cal", "opt"])}
 .of-lay-k .kp-order-form > [data-of="head"]{display:none!important}
 .of-lay-k .of-k-dates,.of-lay-k .of-k-dates > .kp-date-row{display:contents!important}
@@ -336,6 +335,7 @@ ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate
 .of-lay-k .kp-date-row > [data-of="pdate"]{--a:pdate}.of-lay-k .kp-date-row > [data-of="ptime"]{--a:ptime}
 .of-lay-k .kp-date-row > [data-of="ddate"]{--a:ddate}.of-lay-k .kp-date-row > [data-of="dtime"]{--a:dtime}
 .of-lay-k .kp-date-row > [data-of="pq"]{--a:pq;justify-self:end;align-self:center}.of-lay-k .kp-date-row > [data-of="dq"]{--a:dq;justify-self:end;align-self:center}
+.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="dtime"]{zoom:.92}
 .of-lay-k .kp-date-row > [data-of="sw"]{--a:sw;align-self:center;justify-self:center}
 .of-lay-k .kp-date-row > [data-k-hide]{display:none!important}
 .of-lay-k .kp-date-row > [data-of="pdate"],.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="ddate"],.of-lay-k .kp-date-row > [data-of="dtime"]{padding-top:24px;display:flex;align-items:center;gap:6px}
@@ -346,27 +346,31 @@ ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate
 .of-lay-k [data-of="sw"] [data-testid="swap-route"] > span.w-px{display:none}
 .of-lay-k [data-of="sw"] [data-testid="swap-route"] > button:first-child{flex-direction:column;padding:4px 6px!important;text-align:center;line-height:1.3;white-space:normal;word-break:keep-all;width:64px}
 /* 카드 바탕 · 제목 */
-.of-lay-k .of-k-card{position:relative;border-radius:16px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.04),inset 0 0 0 1px #E4E9F2;margin:-10px -12px -10px}
+.of-lay-k .of-k-card{position:relative;border-radius:16px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.04),inset 0 0 0 1px #E4E9F2;margin:-10px -9px -10px}
 .of-lay-k .of-k-card-p{grid-row:hp-start/pm-end;grid-column:hp-start/pq-end}
 .of-lay-k .of-k-card-d{grid-row:hd-start/dm-end;grid-column:hd-start/dq-end}
-.of-lay-k .of-k-card-c{grid-row:hc-start/kx-end;grid-column:hc-start/hc-end}
+.of-lay-k .of-k-card-c{grid-row:hc-start/ton-end;grid-column:hc-start/hc-end}
 .of-lay-k .of-k-card-o{grid-row:ho-start/opt-end;grid-column:ho-start/ho-end}
 .of-lay-k .of-k-card-e{grid-row:he-start/closeym-end;grid-column:he-start/he-end}
 .of-lay-k .of-k-card-s{grid-row:hs-start/dphone-end;grid-column:hs-start/hs-end}
-.of-lay-k .of-k-card-f{grid-row:hf-start/fx-end;grid-column:hf-start/hf-end}
+.of-lay-k .of-k-card-f{grid-row:hf-start/ffee-end;grid-column:hf-start/hf-end}
 .of-lay-k .of-k-card-m{grid-row:hm-start/memo-end;grid-column:hm-start/hm-end}
-.of-lay-k .of-k-head{display:flex;align-items:center;gap:8px;min-height:30px}
+.of-lay-k .of-k-head{display:flex;align-items:center;gap:8px;min-height:26px}
 .of-lay-k .of-k-hp{grid-area:hp}.of-lay-k .of-k-hd{grid-area:hd}.of-lay-k .of-k-hc{grid-area:hc}.of-lay-k .of-k-ho{grid-area:ho}.of-lay-k .of-k-he{grid-area:he}.of-lay-k .of-k-hs{grid-area:hs}.of-lay-k .of-k-hf{grid-area:hf}.of-lay-k .of-k-hm{grid-area:hm}
 .of-lay-k .of-k-head b{font-size:14.5px;font-weight:900;letter-spacing:-.02em;color:#0F1A30}
 .of-lay-k .of-k-ci{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#0F1A30,#2D4C82);display:inline-grid;place-items:center;box-shadow:0 3px 8px rgba(15,26,48,.25)}
 .of-lay-k .of-k-no{width:20px;height:20px;border-radius:20px;background:#EEF3FB;color:#1B2B4B;display:inline-grid;place-items:center;font-size:11px;font-weight:900;border:1px solid #C9D6EC}
 /* 입력칸 — 박스형 */
 .of-lay-k .kp-order-form label{font-size:12px!important;color:#2A3852!important;font-weight:800!important}
-.of-lay-k .kp-order-form input:not([type=checkbox]):not([type=radio]),.of-lay-k .kp-order-form select{min-height:38px;border:1px solid #DCE2EC!important;border-radius:10px!important;background:#fff!important;padding-left:11px!important;box-shadow:none!important}
+.of-lay-k .kp-order-form input:not([type=checkbox]):not([type=radio]),.of-lay-k .kp-order-form select{border:1px solid #DCE2EC!important;border-radius:10px!important;background:#fff!important;padding-left:11px!important;box-shadow:none!important}
 .of-lay-k .kp-order-form input::placeholder,.of-lay-k .kp-order-form textarea::placeholder{color:#7F8BA0!important}
 .of-lay-k .kp-order-form input:focus,.of-lay-k .kp-order-form select:focus{border-color:#1B2B4B!important;box-shadow:0 0 0 3px rgba(45,76,130,.12)!important;outline:none!important}
 .of-lay-k .kp-order-form > [data-of="fsale"] input,.of-lay-k .kp-order-form > [data-of="fdrv"] input,.of-lay-k .kp-order-form > [data-of="ffee"] input{text-align:right;font-variant-numeric:tabular-nums;font-weight:800!important}
-.of-lay-k .kp-order-form > [data-of="memo"]{grid-template-columns:1fr!important;gap:10px!important}
+.of-lay-k .kp-order-form > [data-of="memo"]{grid-template-columns:1fr 1fr!important;gap:10px!important}
+.of-lay-k .kp-order-form > [data-of="memo"] span.tracking-\[0\.26em\]{display:none!important}
+.of-lay-k .kp-order-form > [data-of="memo"] button{white-space:nowrap!important}
+.of-lay-k .kp-order-form > [data-of="memo"] textarea{min-height:56px!important}
+.of-lay-k .kp-order-form > [data-of="ss"] textarea{min-height:34px!important;height:34px!important}
 .of-lay-k .kp-order-form > [data-of="cli"].grid{grid-template-columns:minmax(150px,.9fr) minmax(0,1.5fr)!important}
 .of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="dtime"]{flex-wrap:nowrap;overflow:visible}
 .of-lay-k .kp-order-form > [data-of="cal"]{align-self:stretch;min-height:0;display:flex}
@@ -374,13 +378,13 @@ ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate
 .of-lay-k .kp-order-form > [data-of="opt"] [data-testid="order-run-options"]{display:none!important}
 
 /* 위쪽 띠 · 배차 옵션 · 달력 카드 */
-.of-k-banner{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;background:#fff;border:1px solid #E1E7F0;border-radius:20px;padding:16px 20px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 12px 28px rgba(16,24,40,.06)}
+.of-k-banner{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;background:#fff;border:1px solid #E1E7F0;border-radius:18px;padding:10px 14px;margin-bottom:10px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 12px 28px rgba(16,24,40,.06)}
 .of-k-banner .of-k-quick [data-kp="quick-order"]{margin-bottom:0!important}
 .of-k-tabs{display:flex;gap:8px}
-.of-k-tab{height:44px;display:inline-flex;align-items:center;gap:8px;padding:0 18px;border-radius:12px;font-size:14px;font-weight:800;color:#3A4A66;background:#fff;border:1px solid #E1E7F0;white-space:nowrap;transition:all .15s}
+.of-k-tab{height:40px;display:inline-flex;align-items:center;gap:8px;padding:0 18px;border-radius:12px;font-size:14px;font-weight:800;color:#3A4A66;background:#fff;border:1px solid #E1E7F0;white-space:nowrap;transition:all .15s}
 .of-k-tab:hover{border-color:#1B2B4B;color:#0F1A30}
 .of-k-tab.on{background:linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82);color:#fff;border-color:#0F1A30;box-shadow:0 8px 18px rgba(15,26,48,.25)}
-.of-lay-k .kp-order-card > div:first-child{background:#fff!important;border:1px solid #E1E7F0!important;border-radius:18px;margin-bottom:14px;padding:12px 16px!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.04)}
+.of-lay-k .kp-order-card > div:first-child{background:#fff!important;border:1px solid #E1E7F0!important;border-radius:16px;margin-bottom:10px;padding:8px 14px!important;min-height:0!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.04)}
 .of-k-calcard{flex:1;display:flex;flex-direction:column;background:#fff;border-radius:16px;padding:14px 16px 12px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.04),inset 0 0 0 1px #E4E9F2;margin:-10px 0 -12px}
 .of-k-calcard .of-k-head{display:flex;align-items:center;gap:8px}
 .of-k-calcard .of-k-head b{font-size:14.5px;font-weight:900;color:#0F1A30}
@@ -388,8 +392,4 @@ ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate
 .of-k-calcard .kp-order-cal-deck > .grid.grid-cols-7{flex:1;align-content:space-evenly}
 /* 배차 옵션 줄(오더등록 위) */
 .of-lay-k [data-k-hide]{display:none!important}
-@media (max-width:1760px){${A("k")}{column-gap:24px!important}.of-lay-k .of-k-card{margin-left:-9px;margin-right:-9px}.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="dtime"]{zoom:.86}.of-lay-k .kp-date-row > [data-of="ptime"] *,.of-lay-k .kp-date-row > [data-of="dtime"] *{gap:3px}}
-@media (max-width:1600px){.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="dtime"]{zoom:.8}}
-@media (max-width:1400px){.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="dtime"]{zoom:.72}}
-@media (max-width:1500px){${A("k")}{grid-template-columns:repeat(24,minmax(0,1fr)) 300px!important;column-gap:22px!important;padding:16px 18px 20px!important}}
 `;
