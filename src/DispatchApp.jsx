@@ -57236,6 +57236,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   const [activeTab, setActiveTab] = React.useState(view || "이력서");
   React.useEffect(() => { if (view) { setActiveTab(view); setDraft(null); setEditMode(false); } }, [view]);
   const [teamFilter, setTeamFilter] = React.useState("전체");
+  const [showLeftHr, setShowLeftHr] = React.useState(false); // 🛠 2026-11-27 퇴사자는 맨 아래 '퇴사자' 묶음 — 눌러야 보인다
   const [search, setSearch] = React.useState("");
   // 🚛 2026-11-15 인사발령 — 소속 기사(지입 · 직영 · 임대)도 발령할 수 있게(지입관리 › [인사발령 작성]에서 오면 그 기사를 골라 둔다)
   const [hrWho, setHrWho] = React.useState(() => { try { return sessionStorage.getItem("kpHrDriverFocus") ? "driver" : "staff"; } catch { return "staff"; } });
@@ -57356,8 +57357,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
 
   const grouped = React.useMemo(() => {
     const g = {};
-    filteredRows.forEach(r => {
-      const key = r.team || "미배정";
+    // 🛠 2026-11-27 퇴사자는 재직자와 섞지 않고 맨 아래 '퇴사자' 묶음으로(예전엔 같은 부서 목록에 퇴사 표시 없이 섞였다)
+    [...filteredRows.filter((r) => r.employmentStatus !== "퇴사"), ...filteredRows.filter((r) => r.employmentStatus === "퇴사")].forEach(r => {
+      const key = r.employmentStatus === "퇴사" ? "퇴사자" : r.team || "미배정";
       if (!g[key]) g[key] = [];
       g[key].push(r);
     });
@@ -57365,7 +57367,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   }, [filteredRows]);
 
   React.useEffect(() => {
-    if (!selectedUid && rows.length) setSelectedUid(rows[0].uid);
+    if (!selectedUid && rows.length) setSelectedUid((rows.find((r) => r.employmentStatus !== "퇴사") || rows[0]).uid); // 처음엔 재직자부터
   }, [rows, selectedUid]);
   // 직원 등록 직후 → 그 사람 이력서로
   React.useEffect(() => { if (focusUid && rows.some((r) => r.uid === focusUid)) setSelectedUid(focusUid); }, [focusUid, rows.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -57566,11 +57568,17 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
           {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[13px] text-[#9AA9C3]">인원이 없습니다</div>}
           {Object.entries(grouped).map(([team, members2]) => (
             <div key={team} className="mb-2">
+              {team === "퇴사자" ? (
+                <button type="button" onClick={() => setShowLeftHr((v) => !v)} className="w-full px-2 pt-2 pb-1 flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">퇴사자 {showLeftHr ? "▴" : "▾ 눌러서 보기"}</span>
+                  <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums">{members2.length}명</span>
+                </button>
+              ) : (
               <div className="px-2 pt-2 pb-1 flex items-center justify-between">
                 <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">{team}</span>
                 <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums">{members2.length}명</span>
-              </div>
-              {members2.map(r => {
+              </div>)}
+              {(team !== "퇴사자" || showLeftHr || members2.some((r) => r.uid === selectedUid)) && members2.map(r => {
                 const photo = resumes[r.uid]?.photoUrl;
                 const on = selectedUid === r.uid;
                 return (
@@ -57581,7 +57589,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       {photo ? <img src={photo} className="w-full h-full object-cover" /> : (r.name || "?").slice(0, 1)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.name || r.email}{resumes[r.uid]?.hrSeen === false && canManage && <span className="ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded bg-[#D92D20] text-white">NEW</span>}</div>
+                      <div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.name || r.email}{r.employmentStatus === "퇴사" && <span className={`ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded ${on ? "bg-white/20 text-white" : "bg-[#F2F4F7] text-[#5B6B85]"}`}>퇴사</span>}{resumes[r.uid]?.hrSeen === false && canManage && <span className="ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded bg-[#D92D20] text-white">NEW</span>}</div>
                       <div className={`text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{r.position || "직책 미설정"}</div>
                     </div>
                     {r.pendingApprovals > 0 && <span className={`shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[10.5px] font-extrabold flex items-center justify-center ${on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`} title="결재 대기">{r.pendingApprovals}</span>}
@@ -57817,6 +57825,12 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                     )}
                   </div>
                   )}
+                </div>
+              ) : activeTab === "인사발령" && canManage && selected.employmentStatus === "퇴사" ? (
+                // 🛠 2026-11-27 퇴사자에게는 발령 공문을 내지 않는다(예전엔 [발령 공문 발송]이 그대로 열려 공지 · 전 직원 메일이 나갈 수 있었다)
+                <div className="rounded-2xl border border-[#E3E8F0] bg-[#F8FAFD] px-5 py-10 text-center">
+                  <div className="text-[15px] font-black text-[#0F1A30]">퇴사한 직원이에요</div>
+                  <div className="text-[13px] text-[#5B6B85] mt-1.5 leading-relaxed">퇴사자에게는 인사발령 공문을 보낼 수 없어요.<br />다시 입사했다면 직원관리에서 재직으로 바꾼 뒤 발령하면 돼요.</div>
                 </div>
               ) : activeTab === "인사발령" && canManage ? (
                 <PersonnelOrder company={company} target={selected} isSelf={selected.uid === userId}

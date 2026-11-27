@@ -28,6 +28,7 @@ import LeaveArea from "./LeaveArea";
 import { SafetyEduAdmin } from "./SafetyEdu"; // 🦺 2026-11-24 안전교육 이수 현황 · 기사 영상 대체 설정
 import { HrFleetPanel, HR_FLEET_KINDS } from "./HrFleet"; // 🚛 2026-11-15 지입관리(전체 · 지입 · 직영 · 임대)
 import { kpConfirm } from "./kpDialog";
+import { useStaffHireDates } from "./hireDate";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -65,7 +66,9 @@ function useStaff(company) {
     if (!company) return undefined;
     return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setUsers([]));
   }, [company]);
-  return (users || []).filter((u) => (u.companyName || DEFAULT_COMPANY) === company && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && !isTMUser(u));
+  // 🛠 2026-11-27 가입 승인 대기(approved: false) 계정은 직원 목록 · 재직 인원에서 뺀다(관리자메뉴 › 회원 관리에서 승인) — 예전엔 '재직'으로 섞였다
+  const list = React.useMemo(() => (users || []).filter((u) => (u.companyName || DEFAULT_COMPANY) === company && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && !isTMUser(u) && u.approved !== false), [users, company]);
+  return useStaffHireDates(list); // 🗓 2026-11-27 입사일은 인사 프로필 먼저(src/hireDate.js — 연차 · 급여와 같은 순서)
 }
 
 // ═════════════════ 직원 등록(계정 없이) ═════════════════

@@ -644,7 +644,10 @@ function HrDashboard({ company, onGo, me, att }) {
   const left = staff.filter((u) => u.employmentStatus === "퇴사" && String(u.resignedAt || u.resignDate || u.퇴사일 || "").startsWith(ym));
   // 오늘 근태 — 출근기록 + 전자결재 휴가·외근(결재 완료·진행 중) + 휴직
   const attMap = Object.fromEntries((attendance || []).map((a) => [a.uid, a]));
-  const evs = approvals.flatMap(eventsOf);
+  // 🛠 2026-11-27 퇴사자의 결재 중 휴가 · 퇴사일 뒤 휴가는 부재 일정 · 집계에서 뺀다(예전엔 퇴사 처리 뒤에도 '이번 주 부재'에 남았다)
+  const leftOn = Object.fromEntries(staff.filter((u) => u.employmentStatus === "퇴사").map((u) => [u.id, String(u.resignedAt || u.resignDate || u.퇴사일 || "").slice(0, 10)]));
+  const keepLeft = (uid, date, status) => !(uid in leftOn) || (status === "approved" && !!leftOn[uid] && String(date || "") <= leftOn[uid]);
+  const evs = approvals.flatMap(eventsOf).filter((e) => keepLeft(e.uid, e.date, e.status));
   const awayMap = {}; evs.filter((e) => e.date === today && !/조퇴|지각/.test(e.label)).forEach((e) => { awayMap[e.uid] = e; });
   const stateOf = (u) => {
     const a = attMap[u.id]; const t = hm(a?.checkInTime);
@@ -666,7 +669,7 @@ function HrDashboard({ company, onGo, me, att }) {
   const noHire = active.filter((u) => !hireOf(u));
   const fleetN = drivers.filter((d) => ["지입", "직영", "임대", "분양"].includes(String(d.등급 || "").trim())).length;
   // 이번 달 연차 사용 — 승인된 휴가(시작일 기준) · 일별 부재 인원
-  const monthUse = approvals.filter((a) => a.status === "approved").map((a) => ({ a, x: leaveUseOf(a) })).filter(({ x }) => x && String(x.date).startsWith(ym));
+  const monthUse = approvals.filter((a) => a.status === "approved").map((a) => ({ a, x: leaveUseOf(a) })).filter(({ a, x }) => x && String(x.date).startsWith(ym) && keepLeft(a.drafterUid, x.date, a.status));
   const usedDays = monthUse.reduce((s, { x }) => s + x.days, 0);
   const usedBy = Object.values(monthUse.reduce((m, { a, x }) => { const k = a.drafterUid || a.drafter?.name; const g = m[k] || (m[k] = { name: a.drafter?.name || "-", team: a.drafter?.team || "", days: 0 }); g.days += x.days; return m; }, {})).sort((a, b) => b.days - a.days);
   const dim = new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();

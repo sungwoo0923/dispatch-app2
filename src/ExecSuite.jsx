@@ -833,13 +833,15 @@ export function TeamSchedule({ company }) {
 function TeamScheduleCompany({ company, modeSwitch }) {
   // ⭐ 2026-11-02 점검 — 회사 전체 approvals 조회 대신 연차(leave)만 조회(eventsOf도 leave만 사용)
   const approvals = useLeaveApprovalsOf(company);
-  const { staff } = useStaff(company);
+  const { staff, all } = useStaff(company);
   const today = kstToday();
   const [ym, setYm] = React.useState(today.slice(0, 7));
   const [team, setTeam] = React.useState("전체");
   const [pick, setPick] = React.useState(today);
   const teamOf = Object.fromEntries(staff.map((u) => [u.id, u.team || "미배정"]));
-  const evs = approvals.flatMap(eventsOf).map((e) => ({ ...e, team: teamOf[e.uid] || e.team || "미배정" })).filter((e) => team === "전체" || e.team === team);
+  // 🛠 2026-11-27 퇴사자의 결재 중 휴가 · 퇴사일 뒤 휴가는 일정 · 부재 집계에서 뺀다(인사 HOME 이번 주 부재와 같은 기준)
+  const leftOn = Object.fromEntries((all || []).filter((u) => u.employmentStatus === "퇴사").map((u) => [u.id, String(u.resignedAt || u.resignDate || u.퇴사일 || "").slice(0, 10)]));
+  const evs = approvals.flatMap(eventsOf).filter((e) => !(e.uid in leftOn) || (e.status === "approved" && !!leftOn[e.uid] && e.date <= leftOn[e.uid])).map((e) => ({ ...e, team: teamOf[e.uid] || e.team || "미배정" })).filter((e) => team === "전체" || e.team === team);
   const teams = ["전체", ...Array.from(new Set(staff.map((u) => u.team || "미배정")))];
   const first = new Date(`${ym}-01T00:00:00Z`);
   const startDow = first.getUTCDay();

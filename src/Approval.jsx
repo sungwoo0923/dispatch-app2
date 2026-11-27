@@ -1757,6 +1757,9 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       } catch (e) { setMsg(e.message || "수정 실패"); } finally { setBusy(false); }
       return;
     }
+    // 🛠 2026-11-27 입사일이 없으면 잔여 연차를 셀 수 없다(잔여 '-') — 모르고 올리지 않게 한 번 묻는다
+    if (leaveUseOf({ cat, form: form.key, data: pd }) && leave && !leave.loading && !leave.ent && !leave.hireDate
+      && !await kpConfirm("입사일이 등록되지 않아 잔여 연차를 확인할 수 없어요.\n잔여 연차보다 많이 쓰는지 알 수 없으니, 인사 담당자에게 입사일 등록을 먼저 요청하는 게 좋아요.\n\n그래도 상신할까요?")) return;
     if (!await kpConfirm(`「${finalTitle}」 문서를 ${line.map((s) => s.name).join(" → ")} 순서로 결재 상신할까요?`)) return;
     setBusy(true); setMsg("");
     try {
