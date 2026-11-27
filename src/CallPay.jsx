@@ -576,7 +576,8 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
           ))}
         </div>
         {/* 기간 — 기준 날짜 · 시작일 ~ 종료일(프로그램 달력) */}
-        <div className="inline-flex items-center gap-1.5" data-dep-range>
+        {/* 🛠 2026-11-27 휴대폰처럼 좁은 화면에선 줄을 바꿔 종료일 칸 · 달력 버튼이 잘리지 않게 */}
+        <div className="inline-flex flex-wrap items-center gap-1.5 max-w-full" data-dep-range>
           <select value={basisD} onChange={(e) => setBasisD(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] bg-white outline-none">
             {["상차일", "계산서일", "입금일"].map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
@@ -588,7 +589,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
           </span>
         </div>
         {/* 검색창 — 안에 [조회] */}
-        <div className="inline-flex items-center h-9 w-[300px] rounded-lg border border-[#DCE3EE] bg-white overflow-hidden focus-within:border-[#1B2B4B]" data-dep-search>
+        <div className="inline-flex items-center h-9 w-full max-w-[300px] rounded-lg border border-[#DCE3EE] bg-white overflow-hidden focus-within:border-[#1B2B4B]" data-dep-search>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9AA9C3" strokeWidth="2.2" strokeLinecap="round" className="ml-2.5 shrink-0"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input value={qd} onChange={(e) => setQd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); search(); } }} placeholder="거래처 · 기사 · 상하차지 · 입금자" autoComplete="off" className="flex-1 min-w-0 h-full px-2 text-[13px] font-semibold outline-none bg-transparent" />
           <button type="button" onClick={search} data-dep-search-go className="h-7 mr-1 px-3.5 rounded-md bg-[#0F1A30] text-white text-[12.5px] font-black shrink-0 hover:bg-[#1B2B4B]">조회</button>
