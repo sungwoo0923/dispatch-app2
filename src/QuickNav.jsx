@@ -342,6 +342,17 @@ function HelpCenter({ index, initial, onGo, onClose, isMaster = false }) {
   const foundMenus = searching ? index.filter((e) => !MASTER_MENUS.has(e.menu) && (hit(titleOf(e), nq) || (!e.sub && hit(descOf(e.menu), nq)) || (!e.sub && hit(helpTextOf(e.menu), nq)) || (!e.sub && (MENU_TOURS[e.menu] || []).some((s) => hit(`${s.title} ${s.text}`, nq))))) : [];
   const foundUpd = searching && !isCho(nq) ? (updates || []).filter((x) => hit(x.s, nq)) : [];
   const go = (e) => { onClose(); onGo(e); };
+  // 🛠 2026-11-27 Esc 로 닫기(도움말 '창 닫기' 설명대로) — 영상 재생 중이면 영상만 닫히고, 확인창이 떠 있으면 확인창이 먼저
+  const playRef = React.useRef(play); playRef.current = play;
+  React.useEffect(() => {
+    const k = (e) => {
+      if (e.key !== "Escape" || e.isComposing || playRef.current) return;
+      if (document.querySelector('[data-kp-dialog="1"]')) return;
+      e.preventDefault(); e.stopPropagation(); onClose();
+    };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }, [onClose]);
   return createPortal(
     <div data-kp-dialog data-kp="help-center" className="fixed inset-0 z-[2147482900] flex items-center justify-center p-4" style={{ fontFamily: FONT }}>
       <div className="absolute inset-0 bg-[#060C1A]/55 backdrop-blur-[2px]" onClick={onClose} />

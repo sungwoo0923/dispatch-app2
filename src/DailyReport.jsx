@@ -31,6 +31,7 @@ import { isPopupOn, usePopupPrefs } from "./popupPrefs"; // ⭐ 2026-11-07 팝�
 import { approvalLeaveOn } from "./attendanceUtils";
 import { isDemoOn } from "./devDemoData";
 import { dailyReportDemo } from "./dailyReportDemo";
+import { kpPrompt, kpAlert } from "./kpDialog";
 import { orderStaffNameRaw, useUserNameMap, ORDER_MGR_FIXED } from "./detailGetters";
 import { computeFunds, isCard, isCredit, last4 } from "./fundsCalc";
 import {
@@ -493,13 +494,23 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
     } catch (e) { alert(`PDF 저장 실패: ${e?.message || e}`); } finally { setPrinting(false); setBusy(false); }
   };
   const textOf = (parts) => parts.map((p) => (typeof p === "string" ? p : p.b ?? p.up ?? p.dn)).join("");
-  const sendMail = () => {
+  // 🛠 2026-11-27 받는 사람을 먼저 고른다(예전엔 받는 사람이 빈 mailto 라 메일 프로그램이 없는 PC에선 아무 반응이 없었다)
+  //  · 지난번 받는 사람을 기억 · 보고 내용은 복사해 둬서 웹메일에 붙여 넣을 수 있다
+  const sendMail = async () => {
     const subj = `[${company}] 일일 경영 보고 ${dotDate(today)}`;
     const dTxt = (v, u = "%") => (v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "▲" : v < 0 ? "▼" : ""}${Math.abs(v).toFixed(u === "%p" || u === "%" ? 1 : 0)}${u}`);
     const kpiLines = tiles.map((t) => `· ${t.k} ${t.v}${t.u}  (${t.cmp.map(([l, v]) => `${l} 대비 ${dTxt(v, t.unit || "%")}`).join(" · ")})`);
     kpiLines.push(`· 이번 달 누계 매출 ${fmt(man(month.mtd))}만원  (전월 동기 대비 ${dTxt(month.d)}${goalPct != null ? ` · 목표 달성률 ${goalPct.toFixed(1)}%` : ""})`);
     const body = `${subj}\n보고 기준: ${basis.label}\n\n■ 요약\n${narr.map(textOf).join("\n")}\n\n■ 핵심 지표\n${kpiLines.join("\n")}\n\n※ 차트를 포함한 전체 보고서는 [PDF 저장]으로 내려받아 첨부하시기 바랍니다.\nLogisWeb 자동 생성 보고서`;
-    window.location.href = `mailto:?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
+    let last = ""; try { last = localStorage.getItem("kpBriefMailTo") || ""; } catch { /* 무시 */ }
+    const to = await kpPrompt("받는 사람 이메일을 적어 주세요(여러 명은 쉼표로 구분).\n[확인]을 누르면 메일 프로그램이 열리고, 보고 내용은 복사돼 있어 웹메일에 붙여 넣어도 돼요.", last, { title: "메일로 보내기", okText: "메일 쓰기", placeholder: "예: ceo@company.co.kr" });
+    if (to == null) return;
+    const list = String(to).split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+    const bad = list.filter((x) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+    if (bad.length) { await kpAlert(`이메일 형식이 아니에요: ${bad.join(", ")}`); return; }
+    try { localStorage.setItem("kpBriefMailTo", list.join(", ")); } catch { /* 무시 */ }
+    try { await navigator.clipboard?.writeText(`${subj}\n\n${body}`); } catch { /* 무시 */ }
+    window.location.href = `mailto:${list.map(encodeURIComponent).join(",")}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
   };
 
   // ─────────── 본문(테마 T · 폭 W) ───────────
