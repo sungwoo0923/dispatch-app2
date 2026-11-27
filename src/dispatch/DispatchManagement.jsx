@@ -337,7 +337,8 @@ React.useEffect(() => {
     ...o,
     PRODNM: o?.PRODNM || PROD_NAME[o?.PRODCD] || "",
     PRICE: Number(String(o?.PRICE ?? "").replace(/,/g, "")) || 0,
-    DIFF: Number(String(o?.DIFF ?? "0").replace(/,/g, "")) || 0,
+    // ⛽ 2026-11-27 유가 API가 가끔 전일 대비(DIFF)에 가격 자체를 넣어 준다(▲1840원) — 하루 변동으로 말이 안 되는 값(±200원 넘음)은 0으로
+    DIFF: (() => { const d = Number(String(o?.DIFF ?? "0").replace(/,/g, "")) || 0; return Math.abs(d) > 200 ? 0 : d; })(),
   })).filter(o => o.PRODNM && o.PRICE > 0);
   async function fetchOnce() {
     const ctrl = new AbortController();
