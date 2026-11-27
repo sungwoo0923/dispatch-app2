@@ -1366,7 +1366,7 @@ export default function CompanyApplications() {
               <div className="space-y-2.5 mb-5">
                 {codeNotice.email && (
                   <a
-                    href={`mailto:${codeNotice.email}?subject=${encodeURIComponent("[S-Flow] 가입 승인 및 회사코드 안내")}&body=${encodeURIComponent(`안녕하세요, ${codeNotice.companyName} 담당자님.\n\nS-Flow 물류 관리 시스템 가입이 승인되었습니다.\n\n발급된 회사코드: ${codeNotice.companyCode}\n\n로그인 시 회사코드를 입력해주세요.\n\n감사합니다.\nS-Flow 관리팀`)}`}
+                    href={`mailto:${codeNotice.email}?subject=${encodeURIComponent("[LogisWeb] 가입 승인 및 회사코드 안내")}&body=${encodeURIComponent(`안녕하세요, ${codeNotice.companyName} 담당자님.\n\nLogisWeb 물류 관리 시스템 가입이 승인되었습니다.\n\n발급된 회사코드: ${codeNotice.companyCode}\n\n로그인 시 회사코드를 입력해주세요.\n\n감사합니다.\nLogisWeb 관리팀`)}`}
                     className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition"
                   >
                     <span className="text-[13px] font-semibold text-gray-700"><EditableText id="companyApp.codeNotice.이메일로코드발송" defaultText="이메일로 코드 발송" /></span>
