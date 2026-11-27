@@ -159,11 +159,11 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
       title={collapsed ? it.label : undefined}
       data-on={on ? "1" : "0"}
       className={`kp-subnav-item w-full flex items-center gap-3 rounded-xl font-semibold transition ${sub ? "text-[13px]" : "text-[14px]"} ${collapsed ? "justify-center px-0 py-2.5" : sub ? "pl-2.5 pr-3 py-1.5" : "px-3 py-2.5"} ${
-        on ? "bg-white text-[#1B2B4B] shadow-[0_6px_16px_rgba(0,0,0,0.22)]" : inside ? "bg-white/[0.07] text-white" : "text-blue-50/80 hover:bg-white/[0.08] hover:text-white"
+        on ? "bg-[rgba(143,176,240,0.14)] text-white shadow-[inset_3px_0_0_#8FB0F0]" : inside ? "bg-white/[0.06] text-white" : "text-[#C9D3E3] hover:bg-white/[0.06] hover:text-white"
       }`}
     >
-      <span className={`relative rounded-lg flex items-center justify-center shrink-0 ${sub ? "w-6 h-6" : "w-8 h-8"} ${on ? "bg-[#EEF3FB]" : "bg-white/[0.06]"}`}>
-        <ShellIcon name={it.icon} size={sub ? 14 : 17} className={on ? "text-[#1B2B4B]" : "text-blue-200/85"} />
+      <span className={`relative rounded-lg flex items-center justify-center shrink-0 ${sub ? "w-6 h-6" : "w-8 h-8"} ${on ? "bg-white/[0.12]" : "bg-white/[0.05]"}`}>
+        <ShellIcon name={it.icon} size={sub ? 14 : 17} className={on ? "text-white" : "text-[#9AA9C3]"} />
         {collapsed && hasBadge(it.badge) && <span style={redStyle(it)} className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#FF3B30]" />}
         {isNew(it.newKey) && !on && <NewMark dot />}
       </span>
@@ -176,7 +176,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
             ) : it.en && <span className="block truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", opacity: on ? 0.75 : 0.72 }}>{it.en}</span>}
           </span>
           {hasBadge(it.badge) && (
-            <span title={it.badgeTitle} style={redStyle(it)} className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center tabular-nums ${typeof it.badge === "string" ? "tracking-wider " : ""}${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/15 text-white" : "bg-[#FF3B30] text-white"}`}>{badgeTxt(it.badge)}</span>
+            <span title={it.badgeTitle} style={redStyle(it)} className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center tabular-nums ${typeof it.badge === "string" ? "tracking-wider " : ""}${on ? "bg-white text-[#1B2B4B]" : it.soft ? "bg-white/15 text-white" : "bg-[#FF3B30] text-white"}`}>{badgeTxt(it.badge)}</span>
           )}
           {caret && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60" style={{ transform: caret === "up" ? "rotate(180deg)" : "none", transition: "transform .28s cubic-bezier(.2,.8,.2,1)" }}><path d="M6 9l6 6 6-6" /></svg>}
         </>
@@ -189,7 +189,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
     <div className={`flex bg-[#F4F6FA] overflow-hidden ${noBleed ? "rounded-[20px]" : "-m-4"}`} style={{ height: noBleed ? "calc(100vh - 88px)" : "calc(100vh - 80px)" }}>
       <aside
         className="kp-subnav-aside shrink-0 h-full flex flex-col text-white transition-[width] duration-200"
-        style={{ width: collapsed ? 72 : 228, background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}
+        style={{ width: collapsed ? 72 : 228, background: "linear-gradient(180deg, #0F1A30 0%, #0B1428 60%, #0A1222 100%)" }} /* 🎨 2026-11-27 오더등록 시안 사이드바와 같은 색 */
       >
         <div className={`shrink-0 border-b border-white/10 flex items-center gap-3 ${collapsed ? "px-0 justify-center" : "px-4"}`} style={{ height: SUBNAV_HEAD_H }}>
           <button type="button" onClick={collapsed ? toggle : undefined} title={collapsed ? "메뉴 펼치기" : undefined} className={`relative w-10 h-10 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0 ${collapsed ? "cursor-pointer hover:bg-white/20" : "cursor-default"}`}>
@@ -279,7 +279,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
       <div className="flex-1 min-w-0 h-full flex flex-col">
         {/* ⭐ 2026-11-07 윗줄 — 왼쪽 메뉴 머리(SUBNAV_HEAD_H)와 높이·아래 선을 맞춘 남색 한 줄. 올릴 것이 없으면 숨긴다 */}
         <div className={`kp-subnav-top shrink-0 flex items-center gap-3 px-6 text-white border-b border-white/10 ${top?.left || top?.right ? "" : "kp-subnav-top--slotonly"}`}
-          style={{ height: SUBNAV_HEAD_H, background: "linear-gradient(120deg, #16264A 0%, #1B2B4B 60%, #24406E 100%)" }}>
+          style={{ height: SUBNAV_HEAD_H, background: "linear-gradient(90deg, #0B1428 0%, #0F1A30 45%, #16243F 100%)" }}>
           {top?.left}
           <div ref={setLeft} className="kp-subnav-slot flex items-center gap-3 min-w-0" />
           <div ref={setRight} className="kp-subnav-slot ml-auto flex items-center gap-2 shrink-0" />
