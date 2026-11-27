@@ -93,8 +93,12 @@ export { applyFareRule, findFareRule, farePctOf, effectiveFareRule, fareRuleCalc
 //  · rules는 arrayUnion으로 덧붙여, 다른 사람이 동시에 고친 규칙을 덮어쓰지 않는다
 //  · firestore.rules: match /fareRules/{co} update = fareRulesStaff(co) && role != viewer && 기능 켜짐 → 규칙 변경 필요 없음
 export const canQuickAddFareRule = () => {
-  try { const r = String(localStorage.getItem("role") || ""); return !!r && !["viewer", "driver", "shipper"].includes(r); } catch { return false; }
+  try { const r = String(localStorage.getItem("role") || ""); return !!r && !FARE_RULE_READONLY_ROLES.includes(r); } catch { return false; }
 };
+// 🔒 2026-11-27 운임 규칙(기사운임 · 수수료 자동 계산)은 운송 · 경리 쪽만 고친다 — 영업 · 인사 · 법무 · 개발은 보기만(firestore.rules fareRules 와 같은 목록)
+export const FARE_RULE_READONLY_ROLES = ["viewer", "driver", "shipper", "salesMgr", "salesStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff"];
+// 회사관리 › 운임 규칙 화면 편집 — 운송관리자 · 통합관리자(운송 화면) · 경리관리자 · 최고관리자 · 회사 마스터만(운송사무원은 오더 화면 운임구분 바로 추가만)
+export const canEditFareRules = (role, isMaster = false) => isMaster === true || ["admin", "allMgr", "test", "totalMaster"].includes(role);
 export async function addFareRuleQuick(company, { name, value }) {
   const co = resolveCompany(company);
   const nm = String(name || "").trim();

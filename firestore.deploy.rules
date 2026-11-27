@@ -402,9 +402,9 @@ service cloud.firestore {
     }
     match /fareRules/{co} {
       allow read: if fareRulesStaff(co);
-      allow create: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+      allow create: if fareRulesStaff(co) && !(myRole() in ['viewer', 'salesMgr', 'salesStaff', 'hrManager', 'hrStaff', 'legalMgr', 'legalStaff', 'devMgr', 'devStaff']) && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
-      allow update: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+      allow update: if fareRulesStaff(co) && !(myRole() in ['viewer', 'salesMgr', 'salesStaff', 'hrManager', 'hrStaff', 'legalMgr', 'legalStaff', 'devMgr', 'devStaff']) && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
       allow delete: if fareRulesStaff(co) && isCompanyAdmin(co);
     }
@@ -429,9 +429,12 @@ service cloud.firestore {
       allow read: if (resource == null && isApproved())
         || (coMatch(resource.data) && (resource.data.get('uid', '') == request.auth.uid
           || myRole() in ['test', 'acctStaff', 'hrAcct'] || salesAdmin()));
-      allow create: if coCreate() && salesAdmin();
-      allow update: if coMatch(resource.data) && coKeep() && salesAdmin();
-      allow delete: if coMatch(resource.data) && salesAdmin();
+      allow create: if coCreate() && salesAdmin()
+        && (isTotalMasterUser() || request.resource.data.get('uid', '') != request.auth.uid);
+      allow update: if coMatch(resource.data) && coKeep() && salesAdmin()
+        && (isTotalMasterUser() || (resource.data.get('uid', '') != request.auth.uid && request.resource.data.get('uid', '') != request.auth.uid));
+      allow delete: if coMatch(resource.data) && salesAdmin()
+        && (isTotalMasterUser() || resource.data.get('uid', '') != request.auth.uid);
     }
     function driverOfficeBlocked(c) {
       return c in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes',

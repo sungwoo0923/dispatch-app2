@@ -389,13 +389,20 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       // 🧑‍💻 2026-11-24 운송사에 들어가 볼 때 최고관리자 본인은 그 회사 회원 목록에 넣지 않는다(어느 운송사 소속도 아님)
       return users.filter((u) => u.role !== "driver" && u.role !== "totalMaster" && u.email !== TOTAL_MASTER_EMAIL && (u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany)));
     }
+    // 🔒 2026-11-27 운송관리자(admin · 마스터 아님)는 자기 부서(기본 물류운송팀) 직원만 — 다른 부서(경영지원 · 임원 · 영업) 연락처 · 인사발령 이력을 보던 것.
+    //  가입 승인 대기자는 그대로 보인다(가입 승인은 관리자 · 경리 · 인사관리자부터 — 위 canApprove 정책). 본인 · 연동 화주 계정도 그대로
+    const ownTeamOnly = !canAdmin && myRoleEff === "admin";
+    const myTeam = normalizeTeam(meDoc?.team) || "물류운송팀";
+    const teamOk = (u) => !ownTeamOnly || u.role === "shipper" || u.id === me?.uid || isPending(u)
+      || (normalizeTeam(u.team) ? normalizeTeam(u.team) === myTeam : ["admin", "user"].includes(u.role || "user"));
     return users.filter(u =>
       u.role !== "driver" &&
       u.email !== TOTAL_MASTER_EMAIL &&
       u.role !== "totalMaster" &&
-      (u.role === "shipper" ? shipperLinkedTo(u, effectiveCompany) : (u.companyName || DEFAULT_COMPANY) === effectiveCompany)
+      (u.role === "shipper" ? shipperLinkedTo(u, effectiveCompany) : (u.companyName || DEFAULT_COMPANY) === effectiveCompany) &&
+      teamOk(u)
     );
-  }, [users, isTotalMaster, effectiveCompany, shipperLinkCompanies, tenantNow]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [users, isTotalMaster, effectiveCompany, shipperLinkCompanies, tenantNow, canAdmin, myRoleEff, meDoc?.team, me?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ROLE_ORDER = ["totalMaster", "allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer", "driver", "shipper"];
   const filtered = useMemo(() => {

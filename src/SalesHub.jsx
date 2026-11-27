@@ -26,7 +26,7 @@ import { useSalesBoard, useSalesMe, targetOf } from "./salesData";
 const TeamReport = React.lazy(() => import("./TeamReport")); // 📑 2026-11-15 영업팀 실적 보고서(매출관리와 같은 화면)
 import { useExecMode } from "./execUi"; // 👑 2026-11-17 임원 화면(대표 · 임원 메뉴에서 열 때만 남색 · 골드 보고판)
 const SalesExecView = React.lazy(() => import("./SalesExecView"));
-import { ymOf, kstDay, toInt, cName, dayGap, LEAD_STAGES, OPEN_STAGES, stageOf, leadProb, leadWeighted, pipelineSummary, simulateWin, HEALTH, baseLabel, DEFAULT_POLICY, normPolicy, tierAmount } from "./salesCore";
+import { ymOf, kstDay, toInt, cName, dayGap, LEAD_STAGES, OPEN_STAGES, stageOf, leadProb, leadWeighted, pipelineSummary, simulateWin, HEALTH, baseLabel, DEFAULT_POLICY, normPolicy, tierAmount, canConfirmIncentive, isExistingClient } from "./salesCore";
 
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
 const short = (n) => { const a = Math.abs(n || 0); if (a >= 1e8) return `${(n / 1e8).toFixed(1)}억`; if (a >= 1e4) return `${Math.round(n / 1e4).toLocaleString()}만`; return Math.round(n || 0).toLocaleString(); };
@@ -196,7 +196,8 @@ function Pipeline({ B, who, company, isViewer }) {
       else await addDoc(collection(db, "salesLeads"), { ...data, createdDay: today, createdAt: serverTimestamp() });
       // 수주 → 거래처 담당 자동 등록(이미 담당이 있는 거래처는 그대로)
       if (data.stage === "won" && !B.accounts.some((a) => cName(a.client) === data.name)) {
-        await addDoc(collection(db, "salesAccounts"), { companyName: company, client: data.name, uid: data.ownerUid, name: data.ownerName, since: data.wonAt, memo: "영업 기회 수주", createdAt: serverTimestamp() });
+        const first = B.health(ymOf(0)).find((h) => h.client === data.name)?.first || ""; // 🔒 2026-11-27 이미 오더가 있던 거래처면 신규 가산 없음
+        await addDoc(collection(db, "salesAccounts"), { companyName: company, client: data.name, uid: data.ownerUid, name: data.ownerName, since: data.wonAt, existing: isExistingClient(first, data.wonAt), memo: "영업 기회 수주", createdAt: serverTimestamp() });
       }
       setEdit(null);
     } catch (e) { kpAlert(`저장하지 못했습니다.\n${e?.message || e}`); } finally { setBusy(false); }
@@ -343,10 +344,14 @@ function Accounts({ B, who, company, isViewer, onGo }) {
   const canAssign = who.canManage && !isViewer;
   const save = async () => {
     if (!edit.uid) { kpAlert("영업 담당자를 골라 주세요."); return; }
+    // 🔒 2026-11-27 수주일을 오늘보다 앞으로 돌리면 그 사이 실적이 담당자에게 넘어간다 — 사유(메모)를 꼭 남기게
+    const since = edit.since || today;
+    if (since < today && !String(edit.memo || "").trim()) { kpAlert("수주일을 오늘보다 앞으로 정하려면 메모에 사유를 적어 주세요.\n그 날부터의 오더가 담당자 실적이 됩니다."); return; }
+    if (since < today && !(await kpConfirm(`수주일을 ${since}로 정할까요?\n${since}부터의 오더가 담당자 실적 · 인센티브에 들어갑니다.`, { title: "수주일 확인", okText: "정하기" }))) return;
     setBusy(true);
     try {
       const s = B.staff.find((x) => x.uid === edit.uid);
-      const data = { companyName: company, client: edit.client, uid: edit.uid, name: s?.name || edit.rep || "", since: edit.since || today, memo: edit.memo || "", updatedAt: serverTimestamp() };
+      const data = { companyName: company, client: edit.client, uid: edit.uid, name: s?.name || edit.rep || "", since, existing: isExistingClient(edit.first, since), memo: edit.memo || "", updatedAt: serverTimestamp() };
       if (edit.accountId) await updateDoc(doc(db, "salesAccounts", edit.accountId), data);
       else await addDoc(collection(db, "salesAccounts"), { ...data, createdAt: serverTimestamp() });
       setEdit(null);
@@ -356,7 +361,8 @@ function Accounts({ B, who, company, isViewer, onGo }) {
     if (!(await kpConfirm(`「${edit.client}」의 영업 담당을 해제할까요?\n해제하면 이 거래처 실적이 인센티브에서 빠집니다.`, { title: "담당 해제", okText: "해제", danger: true }))) return;
     try { await deleteDoc(doc(db, "salesAccounts", edit.accountId)); setEdit(null); } catch (e) { kpAlert(`해제하지 못했습니다.\n${e?.message || e}`); }
   };
-  const open = (h) => setEdit({ ...h, memo: B.accounts.find((a) => a.id === h.accountId)?.memo || "", since: h.since || (h.first && h.first < today ? h.first : today) });
+  // 🔒 2026-11-27 수주일 기본값 = 지정하는 날(오늘) — 예전엔 첫 오더일이라 오늘 맡은 기존 거래처의 과거 실적 · 신규 가산이 다 붙었다
+  const open = (h) => setEdit({ ...h, memo: B.accounts.find((a) => a.id === h.accountId)?.memo || "", since: h.since || today });
   const St = ({ h }) => <><Tag tone={HEALTH[h.state].tone === "warn" ? "warn" : HEALTH[h.state].tone === "dim" ? "dim" : h.state === "steady" ? "dim" : ""}>{HEALTH[h.state].label}</Tag>{h.unpaid && <> <Tag tone="warn">미수</Tag></>}</>;
   const chg = (h) => (h.p30 > 0 || h.r30 > 0 ? `${h.change >= 0 ? "+" : ""}${h.change.toFixed(0)}%` : "-");
   const cnt = (fn) => scope.filter(fn).length;
@@ -410,7 +416,7 @@ function Accounts({ B, who, company, isViewer, onGo }) {
           {edit.state === "drop" && <div className="rounded-2xl border border-[#E8D9B0] bg-[#FBF5E4] px-4 py-3 text-[13px] font-bold text-[#6B5320]">최근 30일 매출이 그 전 30일보다 {Math.abs(edit.change).toFixed(0)}% 줄었습니다. 다른 운송사로 넘어가는지 확인이 필요합니다.</div>}
           <fieldset disabled={!canAssign} className="space-y-3 min-w-0">
             <div><Label>영업 담당자</Label><CustomSelect value={edit.uid} onChange={(e) => setEdit((p) => ({ ...p, uid: e.target.value }))} className={inp}><option value="">담당 없음</option>{[...(edit.uid && !B.staff.some((s) => s.uid === edit.uid) ? [{ uid: edit.uid, name: edit.rep }] : []), ...B.staff].map((s) => <option key={s.uid} value={s.uid}>{s.name}{s.team ? ` · ${s.team}` : ""}</option>)}</CustomSelect></div>
-            <div><Label>수주일(이 날부터의 오더가 실적)</Label><CustomDatePicker value={edit.since} onChange={(e) => setEdit((p) => ({ ...p, since: e.target.value }))} className={inp} showIcon /></div>
+            <div><Label>수주일(이 날부터의 오더가 실적 · 오늘보다 앞이면 메모에 사유)</Label><CustomDatePicker value={edit.since} onChange={(e) => setEdit((p) => ({ ...p, since: e.target.value }))} className={inp} showIcon /></div>
             <div><Label>메모</Label><input value={edit.memo} onChange={(e) => setEdit((p) => ({ ...p, memo: e.target.value }))} className={inp} placeholder="예) 소개 영업 · 계약 조건" /></div>
           </fieldset>
           {!canAssign && <div className="text-[12.5px] font-bold text-[#7A879C]">거래처 담당은 영업 관리자가 정합니다.</div>}
@@ -540,6 +546,7 @@ function Incentive({ B, who, company, isViewer }) {
   const mineSaved = saved(uid);
   const repName = B.reps.find((r) => r.uid === uid)?.name || who.name;
   const canAct = who.canManage && !isViewer;
+  const selfBlock = canAct && !canConfirmIncentive(who, uid); // 🔒 2026-11-27 본인 인센티브는 다른 관리자가 확정
   const confirmOne = async (c, name, silent = false) => {
     const amount = p.collectOnly ? c.confirmed : c.total;
     await setDoc(doc(db, "salesIncentives", incId(company, ym, c.uid)), { companyName: company, ym, uid: c.uid, name, amount, total: c.total, held: c.held, sale: c.sale, profit: c.profit, base: c.base, rate: Number(c.effRate.toFixed(2)), status: "확정", rows: c.rows.map((x) => ({ client: x.client, n: x.n, sale: x.sale, profit: x.sale - x.buy, base: x.base, rate: Number(x.rate.toFixed(2)), amount: x.amount, collected: !!x.collected, isNew: !!x.isNew })), policyBase: p.base, confirmedBy: who.name, confirmedAt: serverTimestamp() }, { merge: true });
@@ -547,18 +554,20 @@ function Incentive({ B, who, company, isViewer }) {
   };
   const run = async (fn) => { setBusy(true); try { await fn(); } catch (e) { kpAlert(`처리하지 못했습니다.\n${e?.message || e}`); } finally { setBusy(false); } };
   const confirmMine = async () => {
+    if (!canConfirmIncentive(who, uid)) { kpAlert("본인 인센티브는 직접 확정할 수 없습니다.\n다른 영업 관리자나 임원에게 확정을 요청해 주세요."); return; }
     const amount = p.collectOnly ? cur.confirmed : cur.total;
     if (!(await kpConfirm(`${repName}님 ${Number(ym.slice(5))}월 인센티브를 확정할까요?\n\n지급 확정 ${won(amount)}원${p.collectOnly && cur.held > 0 ? `\n보류 ${won(cur.held)}원(미수: 수금된 뒤 다시 확정하면 더해집니다)` : ""}`, { title: "인센티브 확정", okText: "확정" }))) return;
     run(() => confirmOne(cur, repName));
   };
   const confirmAll = async () => {
-    const list = team.filter((t) => t.total > 0 && saved(t.uid)?.status !== "지급완료");
+    const list = team.filter((t) => t.total > 0 && saved(t.uid)?.status !== "지급완료" && canConfirmIncentive(who, t.uid)); // 본인 것은 빼고
     if (!list.length) { kpAlert("확정할 인센티브가 없습니다."); return; }
     if (!(await kpConfirm(`${Number(ym.slice(5))}월 인센티브를 ${list.length}명 한 번에 확정할까요?\n합계 ${won(list.reduce((s, t) => s + (p.collectOnly ? t.confirmed : t.total), 0))}원`, { title: "전체 확정", okText: "확정" }))) return;
     run(async () => { await runBulkTask({ count: (list).length, label: "인센티브", verb: "확정", unitWord: "명", task: async (progress) => { let _k = 0; for (const t of list) { await confirmOne(t, t.name, true); progress(++_k); } } }); kpAlert(`${list.length}명 확정했습니다.`); });
   };
   const markPaid = async (u, name) => {
     const s = saved(u); if (!s) return;
+    if (!canConfirmIncentive(who, u)) { kpAlert("본인 인센티브는 직접 지급 완료로 바꿀 수 없습니다.\n다른 영업 관리자나 임원에게 요청해 주세요."); return; }
     if (!(await kpConfirm(`${name}님 ${Number(ym.slice(5))}월 인센티브 ${won(s.amount)}원을 지급 완료로 처리할까요?`, { title: "지급 완료", okText: "지급 완료" }))) return;
     run(() => updateDoc(doc(db, "salesIncentives", incId(company, ym, u)), { status: "지급완료", paidBy: who.name, paidAt: serverTimestamp(), paidDay: kstDay() }));
   };
@@ -577,7 +586,7 @@ function Incentive({ B, who, company, isViewer }) {
         kpis={[["예상 인센티브", `${won(cur.total)}원`, `${baseLabel(p)} ${short(cur.base)}원 × ${cur.effRate.toFixed(1)}%`], ["지급 확정", `${won(p.collectOnly ? cur.confirmed : cur.total)}원`, p.collectOnly ? "수금(정산완료)된 거래처분" : "전액"], ["보류", `${won(p.collectOnly ? cur.held : 0)}원`, "미수: 수금되면 확정"], ["처리 상태", mineSaved ? mineSaved.status : "미확정", mineSaved ? `확정액 ${won(mineSaved.amount)}원` : `지급일 다음 달 ${p.payDay}일`]]} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4">
-        <BookCard flush en="STATEMENT" title={`${repName} · ${Number(ym.slice(5))}월 인센티브 내역`} right={<div className="flex gap-2 pr-4"><button type="button" data-ro-allow className={btnLine} onClick={csv}>엑셀(CSV)</button>{canAct && <button type="button" disabled={busy || !cur.total || mineSaved?.status === "지급완료"} className={btnDark} onClick={confirmMine}>{mineSaved ? "다시 확정" : "확정"}</button>}{canAct && mineSaved?.status === "확정" && <button type="button" disabled={busy} className={btnLine} onClick={() => markPaid(uid, repName)}>지급 완료</button>}</div>}>
+        <BookCard flush en="STATEMENT" title={`${repName} · ${Number(ym.slice(5))}월 인센티브 내역`} right={<div className="flex gap-2 pr-4"><button type="button" data-ro-allow className={btnLine} onClick={csv}>엑셀(CSV)</button>{selfBlock && <span className="self-center text-[12.5px] font-bold text-[#7A879C]">본인 인센티브는 다른 관리자가 확정합니다</span>}{canAct && !selfBlock && <button type="button" disabled={busy || !cur.total || mineSaved?.status === "지급완료"} className={btnDark} onClick={confirmMine}>{mineSaved ? "다시 확정" : "확정"}</button>}{canAct && !selfBlock && mineSaved?.status === "확정" && <button type="button" disabled={busy} className={btnLine} onClick={() => markPaid(uid, repName)}>지급 완료</button>}</div>}>
           {!cur.rows.length ? <Empty>이 달 인센티브 대상 실적이 없습니다.<br />거래처 담당이 정해져 있고, 수주일 이후 배차완료된 오더가 있어야 합니다.</Empty> : narrow ? (
             <div className="divide-y divide-[#EEF2F8]">
               {cur.rows.map((x) => (
@@ -630,7 +639,7 @@ function Incentive({ B, who, company, isViewer }) {
                     <tr key={t.uid} data-ro-allow onClick={() => setRep(t.uid)} className={`cursor-pointer hover:bg-[#F2F6FD] border-t border-[#EEF2F8] ${t.uid === uid ? "bg-[#EEF3FC]" : i % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
                       <Td bold>{t.name}{t.position ? <span className="text-[#7A879C] font-bold"> {t.position}</span> : null}</Td><Td right>{won(t.sale)}</Td><Td right><PAmt v={t.profit}>{won(t.profit)}</PAmt></Td><Td right bold>{won(t.total)}</Td><Td right bold className="!text-[#2D4C82]">{won(p.collectOnly ? t.confirmed : t.total)}</Td><Td right>{won(p.collectOnly ? t.held : 0)}</Td>
                       <Td><StBadge s={s} />{s && s.status === "확정" && s.amount !== (p.collectOnly ? t.confirmed : t.total) && <> <Tag tone="warn">금액 변동</Tag></>}</Td>
-                      <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>{canAct && s?.status === "확정" && <button type="button" disabled={busy} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#1B2B4B]" onClick={() => markPaid(t.uid, t.name)}>지급 완료</button>}</td>
+                      <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>{canAct && s?.status === "확정" && canConfirmIncentive(who, t.uid) && <button type="button" disabled={busy} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#1B2B4B]" onClick={() => markPaid(t.uid, t.name)}>지급 완료</button>}</td>
                     </tr>
                   ); })}
                 </tbody>

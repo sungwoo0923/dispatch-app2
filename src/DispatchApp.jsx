@@ -3252,7 +3252,7 @@ import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
-import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
+import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown, canEditFareRules } from "./fareRules";
 import { SpecialFareTag, SpecialFareLine } from "./specialFareTag";
 import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats as calcFareStats } from "./FareResultUi"; // ⚠ 이 파일에 같은 이름 상태값(fareStats)이 있어 다른 이름으로 // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
@@ -3894,7 +3894,8 @@ const DEPT_MENUS = {
   hr: ["HOME", "전자결재", "인사관리부", "증명서발급", "관리자메뉴", "회사관리"],
   // 💼 2026-11-10 영업: 영업관리(실적·인센티브·영업 기회) + 거래처·단가·운임 + 확인용 배차현황 — 배차 등록·정산은 빼고
   // 🧹 2026-11-15 영업은 홈 · 전자결재 · 영업관리 · 회사관리만 — 배차현황 · 운임 · 배차자용 거래처관리 · 배차 기준 매출관리는 뺐다(내 매출 · 인센 · 내 거래처는 영업관리 안에서)
-  sales: ["HOME", "전자결재", "영업관리", "회사관리"],
+  // 🧾 2026-11-27 견적서 작성(단가표 › 직접 작성 · 발행 이력, 운임조회 › 운임 산출)은 영업 일 — 단가표 · 운임조회를 다시 넣었다
+  sales: ["HOME", "전자결재", "영업관리", "단가표", "운임조회", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
   exec: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "비공개운임", "스케줄", "매출관리", "영업관리", "인사이트", "관리자메뉴", "회사관리"], // 📊 2026-11-06 일일 경영 보고 — 임원 홈(경영 브리핑) 바로 다음 // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
@@ -9260,6 +9261,8 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
     if (["회계관리", "인사관리부", "출근기록부", "직원관리", "기사서류", "자금관리", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) return ["회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급"].includes(m) && ownOk(m) ? "ok" : "hidden";
     // ⭐ 2026-11-04 회사 마스터가 권한 관리에서 관리자 메뉴를 숨겨도 본인은 잠기지 않게(다시 고칠 수 있도록)
     if (m === "관리자메뉴" && role === "admin" && myProfileDoc?.isMaster === true) return "ok";
+    // 🔒 2026-11-27 눌러도 열리지 않는 메뉴는 숨긴다(handleMenuClick 과 같은 조건) — 권한 관리에 운송사무원 설정을 저장한 회사는 매출관리가 보이는데 눌러도 반응이 없었다
+    if (!deptMode && (role === "user" || role === "test") && blockedMenus.includes(m)) return "hidden";
     if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
     const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
     if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && role !== "viewer") return "hidden"; // 🔒 2026-11-14 예전 !isViewer — 지금 보는 메뉴가 '조회'면 운송사무원 등에게도 관리자메뉴가 보였다
@@ -57060,7 +57063,7 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
       )}
       {tab === "조직도" && <OrgChart userCompany={userCompany} />}
       {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
-      {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
+      {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={canEditFareRules(role, myDocCM?.isMaster === true)} myName={myDocCM?.name || myName} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
         <MyProfilePage
