@@ -10,7 +10,7 @@ import { attachTmapTraffic } from "../../trafficTmap";
 import { imeFocusRef } from "../../imeFocus";
 import { isBlindHidden } from "../../blind";
 import { mgrName } from "../../mgrPlaceholder";
-import { html2canvas, loadJsPDF } from "../../lazyLoad";
+import { lazyView, html2canvas, loadJsPDF } from "../../lazyLoad";
 import React from "react";
 import { VehicleTypePicker } from "../../vehicleTypes";
 import { getTenant, withCo } from "../../fsTenant";
@@ -51,6 +51,10 @@ import { ensureUploadToken } from "../../uploadTokenClient";
 // ⚡ 2026-11-27 속도 — xlsx(약 420KB)는 엑셀 버튼 · 엑셀 올리기를 누를 때 받는다(예전엔 배차 프로그램 첫 묶음에 들어 로그인 → HOME 이 늦었다).
 //  쓰는 함수마다 맨 앞에서 const XLSX = await loadXLSX() — 동작 · 파일 모양은 그대로
 export const loadXLSX = () => import("xlsx");
+export const ClassicResume = lazyView(() => import("../../ClassicResume"));
+export const MonthCompareAnalysis = lazyView(() => import("../../MonthCompareAnalysis"));
+export const MonthlyReport = lazyView(() => import("../../MonthlyReport"));
+export const StaffPerformance = lazyView(() => import("../../StaffPerformance"));
 
 // 🛠 2026-11-27 오더 복사/수정 패널 — 저장할 때 "패널을 연 뒤 내가 바꾼 칸"만 보낸다.
 //  (예전엔 연 순간의 오더 전체를 다시 써서, 그사이 다른 직원이 넣은 차량 · 기사 수락 · 지급완료 등이 예전 값으로 되돌아갔다)
@@ -2266,6 +2270,67 @@ export const EDIT_REQUEST_FIELD_LABELS = {
   상차지담당자번호: "상차지 담당자 연락처", 하차지담당자번호: "하차지 담당자 연락처",
   전달사항: "전달사항", 요청차량: "요청차량", 추가정보: "추가정보",
 };
+// ⭐ 매출관리(손익보고서/YearlySummaryChart)에서 "총 운송료"와 별도로 "순수 운송료"를
+// 구분해서 보여주는 기능 — 원래는 예전 운송사 전용으로 "후레쉬물류"/"채석강" 거래처명을
+// 코드에 직접 박아 판별했는데, 이 프로그램은 여러 운송사가 함께 쓰기 때문에 회사마다
+// 그 대상 거래처가 다를 수 있다. 그래서 거래처관리에서 거래처별로 체크하는
+// "순수매출제외" 플래그로 판별하도록 일반화한다. 아직 한 번도 체크박스를 저장한
+// 적 없는 기존 데이터(주로 예전 운송사)는 예전 하드코딩 이름으로 폴백해서 동작이
+// 그대로 유지되게 한다 — 거래처관리에서 체크박스를 명시적으로 켜거나 끄는 순간
+// 그 거래처는 폴백 대신 저장된 값을 따른다.
+export const LEGACY_NET_REVENUE_EXCLUDED_NAMES = ["후레쉬물류", "채석강"];
+// ⭐ 오더의 거래처명이 항상 "기본거래처"에 똑같은 이름으로 등록되어 있는 건 아니다
+// (예: "채석강-더담"처럼 하차지거래처에만 그 이름으로 등록된 경우) — 그래서
+// 기본거래처에 정확히 일치하는 이름이 없으면 하차지거래처에서도 찾아본다. 예전
+// 하드코딩(레거시)은 이름에 "채석강"이 부분적으로만 들어가도 걸렸기 때문에(예:
+// "채석강-더담"도 "채석강"을 포함), 그 레거시를 실제로 끄려면 정확히 그 이름과
+// 일치하는 기본거래처 "또는" 하차지거래처 문서에 명시적으로 체크가 되어 있어야 한다.
+export function isNetRevenueExcludedClient(name, clientsList, placesList) {
+  const n = String(name || "").trim();
+  if (!n) return false;
+  const foundClient = (clientsList || []).find((c) => String(c.거래처명 || "").trim() === n);
+  if (foundClient && typeof foundClient.순수매출제외 === "boolean") return foundClient.순수매출제외;
+  const foundPlace = (placesList || []).find((p) => String(p.업체명 || "").trim() === n);
+  if (foundPlace && typeof foundPlace.순수매출제외 === "boolean") return foundPlace.순수매출제외;
+  return LEGACY_NET_REVENUE_EXCLUDED_NAMES.some((x) => n.includes(x));
+}
+export function getNetRevenueExcludedNames(clientsList, placesList) {
+  const names = new Set();
+  (clientsList || []).forEach((c) => {
+    const nm = (c.거래처명 || "").trim();
+    if (nm && isNetRevenueExcludedClient(nm, clientsList, placesList)) names.add(nm);
+  });
+  (placesList || []).forEach((p) => {
+    const nm = (p.업체명 || "").trim();
+    if (nm && isNetRevenueExcludedClient(nm, clientsList, placesList)) names.add(nm);
+  });
+  return Array.from(names);
+}
+
+// ⭐ 성능 최적화용 — isNetRevenueExcludedClient는 매번 clients/places 배열을
+// find()로 스캔해서 O(거래처 수)가 드는데, 매출관리처럼 수천 건의 오더를 한 건씩
+// 이 함수로 필터링하는 화면에서는 그게 O(오더 수 × 거래처 수)로 불어나 렉의 주범이
+// 된다. clients/places가 바뀔 때 딱 한 번만 이름→플래그 Map을 만들어두면, 이후
+// 오더 한 건당 조회는 O(1)로 끝난다. (기본거래처 플래그가 하차지거래처보다
+// 우선한다는 isNetRevenueExcludedClient의 규칙과 동일하게, clients를 나중에 덮어써
+// 우선순위를 맞춘다.)
+export function buildNetRevenueExclusionLookup(clientsList, placesList) {
+  const map = new Map();
+  (placesList || []).forEach((p) => {
+    const nm = String(p.업체명 || "").trim();
+    if (nm && typeof p.순수매출제외 === "boolean") map.set(nm, p.순수매출제외);
+  });
+  (clientsList || []).forEach((c) => {
+    const nm = String(c.거래처명 || "").trim();
+    if (nm && typeof c.순수매출제외 === "boolean") map.set(nm, c.순수매출제외);
+  });
+  return (name) => {
+    const n = String(name || "").trim();
+    if (!n) return false;
+    if (map.has(n)) return map.get(n);
+    return LEGACY_NET_REVENUE_EXCLUDED_NAMES.some((x) => n.includes(x));
+  };
+}
 
 // 거래처/상하차지별로 "기사전달용" 복사 시 자동으로 함께 붙는 주의사항 문구.
 // 실제 값은 clients/places 문서의 기사전달주의사항 필드에 저장되며(오더메모와
@@ -3375,6 +3440,13 @@ export function formatPhone(phone) {
   if (n <= 6) return `${d.slice(0, 3)}-${d.slice(3)}`;
   if (n <= 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
   return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+}
+// 차량번호 정규화 (공백 / 하이픈 제거 + 소문자)
+export function normalizePlate(v = "") {
+  return String(v)
+    .toLowerCase()
+    .replace(/\s/g, "")
+    .replace(/-/g, "");
 }
 // ================================
 // 화주사 등록 오더(raw HH:mm + 구분필드)를 운송프로그램 표기(오전 8시 이후)로 변환
@@ -7004,6 +7076,11 @@ export function AddressCell({ text = "", max = 5, valueClassName = "", popupTitl
     </div>
   );
 }
+
+// ─────────── 내정보 컴포넌트 ───────────
+// 내정보 화면의 카드 틀 — 화면 안에서 만들면 입력칸이 매 글자마다 다시 그려져 포커스가 빠지므로 밖에 둔다
+// ⭐ 회사관리(회사정보·내정보) 공용 카드 — 영문 소제목 + 제목 + 설명, 아래 얇은 구분선. 글씨는 크고 진하게.
+export const KP_CARD = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
 
 // ⭐ 2026-11-02 점검 — 사업자등록증·직인 base64가 한 문서(transportApplications, 한도 1MiB)에 함께 저장되므로 저장 전에 이미지를 줄임(직인은 투명 배경 유지)
 export const COMPANY_DOC_B64_LIMIT = 900000;
