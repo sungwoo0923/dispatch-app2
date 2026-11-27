@@ -774,6 +774,8 @@ async function runAssistantChat({ db, auth, data, makeAnthropic, now = Date.now(
   const mode = personaOf(data?.mode);
   const today = kstYmd(now);
   const ctx = { db, co: who.co, isTm: who.isTm, perms: who.perms, uid: who.uid, today, actions: [] };
+  // 🗓 2026-11-27 거래처별 마감일 → 청구월(미수금 · 매출 달이 화면과 같게)
+  try { const A = await arCore(); const cs = await db.collection("clients").where("companyName", "==", who.co).get(); A.setClientCloseDays(who.co, cs.docs.map((x) => x.data() || {})); } catch { /* 마감일 없이 계산(말일) */ }
   const messages = [...prev, { role: "user", content: `${contextLine({ today, who, screen: data?.screen, focus: data?.focusOrderId })}\n${text}` }];
   const tools = toolDefs(mode);
   const allowed = new Set(PERSONAS[mode].tools);

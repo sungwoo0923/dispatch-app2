@@ -34,6 +34,8 @@ function makeBankSync({ db, FieldValue, getPopbill, callerOf, now = () => Date.n
   // 미정산 달(최근 13개월) — 회사 오더 + 입금 기록
   async function monthsOf(co) {
     const C = await core();
+    // 🗓 2026-11-27 거래처별 마감일(25일 마감 → 10/26 ~ 11/25) — 화면과 같은 청구월로 묶으려면 계산 전에 넣는다(arCore 한 곳)
+    { const A = await import("./arCore.mjs"); const cs = await db.collection("clients").where("companyName", "==", co).get().catch(() => null); A.setClientCloseDays(co, (cs?.docs || []).map((x) => x.data() || {})); }
     const t = now();
     const d = new Date(t + KST); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 12);
     const from = d.toISOString().slice(0, 10);

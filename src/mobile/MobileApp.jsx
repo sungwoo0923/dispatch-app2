@@ -77,8 +77,9 @@ import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncEx
 import { withCo, getTenant, isPreviewMode } from "../fsTenant";
 import { useOrderFormFields } from "../orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "../OrderFieldsModal";
-import { readSkin, saveSkin, nextSkin, skinName } from "../orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드(기본) · 최고관리자만 기본 입력창과 전환
-import { MobileRouteLine, MOBILE_ROUTE_CSS } from "../orderLayouts";
+import { registerCloseDays } from "../clientCloseDays"; // 🗓 2026-11-27 거래처별 마감일
+import { readSkin, saveSkin, nextSkin, skinName, SKIN_SWITCH } from "../orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드(기본) · 최고관리자만 기본 입력창과 전환
+import { MobileRouteLine, MOBILE_ROUTE_CSS, MOBILE_RLINE_CSS } from "../orderLayouts";
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "../orderHistoryCache"; // ⚡ 2026-11-23 13개월 오더 폰 보관
 // ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
 //  30분 뒤 다시 열면 13개월을 통째로 또 받았다(운임 비교에는 실시간이 필요 없다)
@@ -120,7 +121,7 @@ import "./mobileTheme.css";
 import { OrderTimeline } from "../OrderTimeline"; // ★ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
-import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History, PhoneCall } from "lucide-react";
+import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, StickyNote, MessageSquare, History, PhoneCall } from "lucide-react";
 import VoiceAgentCall from "./VoiceAgentCall"; // 📞 2026-11-25 AI 상담원 음성 오더(통화하듯 말로 등록)
 import { addCompanyDropdownOption } from "../companyDropdownOptions"; // 📞 AI 상담원 — 새 지급방식 등 추가
 import { withCustomVehicleTypes, VT_DEFAULTS, addVehicleType } from "../vehicleTypes"; // 📞 AI 상담원 — 차종 목록 · 새 차종
@@ -3980,6 +3981,8 @@ useEffect(() => {
       .filter(c => !co || !c.companyName || c.companyName === co)
       .map(d => ({
         id: d.id,
+        ...(d.마감일 ? { 마감일: d.마감일, 마감시작월: d.마감시작월 || "" } : {}), // 🗓 2026-11-27 거래처별 마감일
+        ...(d.마감변경 ? { 마감변경: d.마감변경 } : {}),
         거래처명: d.거래처명 || "",
         주소: d.주소 || "",
         담당자: d.담당자 || "",
@@ -3994,6 +3997,7 @@ useEffect(() => {
         팝업표시: d.팝업표시 !== undefined ? d.팝업표시 : true,
         ...(typeof d.순수매출제외 === "boolean" ? { 순수매출제외: d.순수매출제외 } : {}),
       }));
+    registerCloseDays(co, list); // 🗓 2026-11-27 거래처별 마감일 → 청구월
     startTransition(() => setClients(list)); // 끊김 방지(낮은 우선순위)
   });
   return () => unsub();
@@ -14335,7 +14339,7 @@ const [matchedClients, setMatchedClients] = useState([]);
   const ofShow = ofs.show;
   const [ofOpen, setOfOpen] = useState(false);
   // 🎨 2026-11-27 모든 계정 = A 루트 보드 · 최고관리자만 [디자인 변경]으로 예전 기본 입력창과 오간다(이 기기에 기억)
-  const mSkinAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })()); // 🧪 개발 화면에서만 점검용
+  const mSkinAllowed = SKIN_SWITCH && (role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })())); // 🧪 개발 화면에서만 점검용
   const [mSkinPick, setMSkinPick] = useState(() => readSkin(true));
   const mSkin = mSkinAllowed ? mSkinPick : readSkin(false);
   const mRoute = mSkin === "route";
@@ -15383,6 +15387,7 @@ const pickDrop = (c) => {
 
   return (
     <div className={`kp-m-form px-3.5 py-3 space-y-3 ${cardVersionB ? "kp-m-form-b" : "kp-m-form-a"}${mRoute ? " kp-m-route" : ""}`} style={{ "--reg-accent": cardVersionB ? "#1B2B4B" : "#0F1A30" }}>
+      <style>{MOBILE_RLINE_CSS}</style>{/* 🗓 2026-11-27 상차 · 하차 사이 ⇅ 교체 + 거리 · 시간 한 줄(기본 입력창) */}
       {mRoute && <style>{MOBILE_ROUTE_CSS}</style>}
       {form._editId && <MobileFixedRouteNotice order={form} />}
       {/* 🧭 2026-11-14 PC 오더등록과 같게 — 경로보기 · 정기오더 · (수정할 때) 담당자 변경 */}
@@ -15845,19 +15850,7 @@ const pickDrop = (c) => {
   {/* 상/하차지 맞바꾸기 — 카드 사이에 별도 공간을 차지하지 않도록 높이 0인
       래퍼 안에서 절대위치로 배치해, 상/하차지 라벨 컬럼(왼쪽 88px) 정중앙 ·
       두 카드의 경계선 위에 딱 겹치게 띄운다. 카드가 벌어지지 않는다. */}
-  {mRoute ? <MobileRouteLine form={form} onSwap={handleSwapPickupDrop} onMap={() => setFormRouteMap(true)} /> : (
-  <div className="relative h-0 z-10">
-    <button
-      type="button"
-      onClick={handleSwapPickupDrop}
-      className={`absolute left-[52px] top-0 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center shadow active:scale-90 transition ${
-        cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
-      }`}
-    >
-      <ArrowUpDown className="w-3.5 h-3.5 text-white" strokeWidth={2.4} />
-    </button>
-  </div>
-  )}
+  <MobileRouteLine form={form} onSwap={handleSwapPickupDrop} onMap={() => setFormRouteMap(true)} />{/* 🗓 2026-11-27 ⇅ 교체 + 거리 · 시간 · 도착 · 경로보기 한 줄 */}
 
   {/* 하차지 */}
   <RowLabelInput

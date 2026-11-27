@@ -50,8 +50,11 @@ import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
-import { ORDER_SKIN_CSS, nextSkin, skinName, readSkin, saveSkin } from "./orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드 기본 · 최고관리자만 기본 입력창과 전환
-import { LAYOUT_SKINS, ORDER_LAYOUT_CSS, LayoutDecor, FareSummary, routeGrid } from "./orderLayouts"; // 🎨 A 루트 보드
+import { registerCloseDays, closeRuleOf, clientPeriod, periodText } from "./clientCloseDays"; // 🗓 2026-11-27 거래처별 마감일
+import ClientCloseDayModal from "./ClientCloseDayModal";
+const clientPeriodText = (name) => { const k = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7); return `${Number(k.slice(5))}월분 ${periodText(clientPeriod(name, k))}`; };
+import { ORDER_SKIN_CSS, nextSkin, skinName, readSkin, saveSkin, SKIN_SWITCH } from "./orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드 기본 · 최고관리자만 기본 입력창과 전환
+import { LAYOUT_SKINS, ORDER_LAYOUT_CSS, LayoutDecor, FareSummary, routeGrid, SwapRouteButton } from "./orderLayouts"; // 🎨 A 루트 보드
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
 import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
@@ -2606,6 +2609,10 @@ function normalizeClient(row) {
     ...(typeof row.매출순위제외 === "boolean" ? { 매출순위제외: row.매출순위제외 } : {}),
     // ⭐ 2026-11-03 여러 사업자 — 이 거래처를 고르면 자동으로 맞출 청구 사업자(비면 기본 = 회사)
     ...(row.기본사업자 ? { 기본사업자: String(row.기본사업자) } : {}),
+    // 🗓 2026-11-27 거래처별 마감일(비우면 말일) · 적용 시작 청구월 — functions/arCore.mjs
+    ...(row.마감일 ? { 마감일: String(row.마감일), 마감시작월: String(row.마감시작월 || "") } : {}),
+    ...(row.마감변경 && typeof row.마감변경 === "object" ? { 마감변경: row.마감변경 } : {}), // [마감날짜 변경] 이번 달만
+    ...(row.결제일 ? { 결제일: String(row.결제일) } : {}),
   };
 }
 function normalizeClients(arr) {
@@ -2633,6 +2640,10 @@ function normalizeClients(arr) {
       contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
       ...(typeof c.순수매출제외 === "boolean" ? { 순수매출제외: c.순수매출제외 } : {}),
       ...(typeof c.매출순위제외 === "boolean" ? { 매출순위제외: c.매출순위제외 } : {}),
+      ...(c.기본사업자 ? { 기본사업자: c.기본사업자 } : {}),
+      ...(c.마감일 ? { 마감일: c.마감일, 마감시작월: c.마감시작월 || "" } : {}), // 🗓 2026-11-27 거래처별 마감일
+      ...(c.마감변경 ? { 마감변경: c.마감변경 } : {}),
+      ...(c.결제일 ? { 결제일: c.결제일 } : {}),
     }));
 }
 // 화주사 수정요청 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
@@ -4665,7 +4676,7 @@ function useRealtimeCollections(user, userCompany, role) {
   const finalLockOf = (o) => {
     if (finalBypass || !o) return null;
     const c = String(o.거래처명 || "").trim(); if (!c) return null;
-    const ym = String(o.마감월 || "").slice(0, 7) || String(o.상차일 || "").slice(0, 7);
+    const ym = billYmOf(o); // 🗓 2026-11-27 거래처 마감일까지(arCore 한 곳)
     const d = finalDesk.closes?.get(`${c}|${ym}`);
     return isFinalLocked(d) ? { client: c, ym } : null;
   };
@@ -5140,6 +5151,7 @@ const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(�
       const arr = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(c => (c.companyName || DEFAULT_COMPANY) === viewCompany);
+      registerCloseDays(viewCompany, arr); // 🗓 2026-11-27 거래처별 마감일 → 청구월(정산 · 명세서 · 미수금 · 매출 같은 달)
       setClients(normalizeClients(arr));
       idleSave("clients", arr);
       markBootBase(pcBootStore, "clients");
@@ -8464,6 +8476,8 @@ useEffect(() => {
     loadFullHistory,
     historyLoading,
   } = useRealtimeCollections(user, userCompany, role);
+  // 🗓 2026-11-27 거래처 마감일이 바뀌면 오더 묶음(청구월)을 다시 계산 — 배열만 새로 만들어 화면 memo 를 깨운다(저장 없음)
+  React.useEffect(() => { const f = () => setDispatchData((d) => (Array.isArray(d) ? d.slice() : d)); window.addEventListener("kp-close-days", f); return () => window.removeEventListener("kp-close-days", f); }, [setDispatchData]);
   // ⭐ 2026-11-06 고정노선현황 › 운송업체 설정 — 끄거나 삭제한 업체의 오더는 프로그램 어디에도 안 보이게(데이터 입구에서 한 번)
   //   목록·건수·배지·검색·미배차·실시간·지입차관리·대시보드·엑셀이 모두 아래 dispatchData를 쓰므로 그대로 따른다.
   //   정산·매출은 원래부터 같은 기준으로 빠졌고, 시트 연동은 서버가 그대로 한다(오더는 저장소에 남음).
@@ -11039,7 +11053,7 @@ function DmDot({ on, alert = false }) {
   // 🎨 2026-11-26 오더등록 디자인 시안 — 최고관리자만 [디자인 변경]으로 돌려 본다(입력칸 · 버튼 · 기능은 그대로, 모양만 · src/orderSkins.js)
   // 🎨 2026-11-27 모든 계정 = A 루트 보드 · 최고관리자만 [디자인 변경]으로 예전 기본 입력창과 오간다(이 기기에 기억)
   // 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpSkinTest=1 이면 다른 계정으로도 전환 점검 — 배포 빌드에는 들어가지 않는다
-  const skinAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })());
+  const skinAllowed = SKIN_SWITCH && (role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })()));
   const [ofSkin, setOfSkin] = React.useState(() => readSkin(true));
   const skinOn = skinAllowed ? ofSkin : readSkin(false);
   const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); saveSkin(n); return n; });
@@ -16501,14 +16515,8 @@ React.useEffect(() => {
   </button>
 </div>
 
-<button
-type="button"
-onClick={swapPickupDrop}
-className="ml-2 inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-extrabold rounded-xl border border-[#1B2B4B] bg-white text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white active:scale-95 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B2B4B] focus-visible:ring-offset-2"
-title="상차지 ↔ 하차지 교체"
->
-<DmIcon name="swap" size={14} />상·하차 교체
-</button>
+{/* 🗓 2026-11-27 오더등록 1안 — [상·하차 교체] 버튼 하나에 거리 · 시간 · 도착 예상 · 경로보기(주소 둘 다 있을 때) */}
+<SwapRouteButton form={form} onSwap={swapPickupDrop} onMap={() => setShowFareRouteMap(true)} />
   </div>
 </div>
 {/* ===== 오더 자동파싱 영역 ===== */}
@@ -46680,6 +46688,9 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
     if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) { setRule(c.결제일 || ""); return; }
     upsertClient?.({ ...client, 결제일: v });
   };
+  // 🗓 2026-11-27 거래처 마감일(비우면 말일) — 이 거래처의 명세서 · 미수금 청구월 기간
+  const [cdOpen, setCdOpen] = React.useState(false);
+  const cdRule = closeRuleOf(name);
   const rows = [["사업자번호", c.사업자번호], ["대표자", c.대표자], ["담당자", c.담당자], ["연락처", c.연락처], ["이메일", c.이메일], ["주소", c.주소]];
   return (
     <div className="mb-4 rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
@@ -46694,6 +46705,12 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
             <button key={v} type="button" disabled={isViewer || !client} onClick={() => save(v)} className={`h-8 px-2.5 rounded-lg text-[12px] font-black ${rule === v ? "bg-white text-[#0F1A30]" : "bg-white/10 border border-white/20 text-white"} disabled:opacity-50`}>{v}</button>
           ))}
           <input value={rule} onChange={(e) => setRule(e.target.value)} onBlur={(e) => save(e.target.value.trim())} disabled={isViewer || !client} placeholder="직접 (예: 익월 25일)" className="h-8 w-36 px-2.5 rounded-lg bg-white/10 border border-white/20 text-[12.5px] font-bold text-white placeholder:text-white/40 outline-none" />
+          <span className="w-px h-5 bg-white/20 mx-1" />
+          <span className="text-[12px] font-bold text-white/70">마감일</span>
+          <button type="button" data-testid="ar-closeday-btn" onClick={() => setCdOpen(true)} title="매달 며칠에 마감하는 업체인지 — 명세서 · 미수금 · 월 마감 기간이 같이 바뀌어요"
+            className={`h-8 px-2.5 rounded-lg text-[12px] font-black ${cdRule?.day ? "bg-white text-[#0F1A30]" : "bg-white/10 border border-white/20 text-white"}`}>
+            {cdRule?.day ? `${cdRule.day}일 마감 · ${clientPeriodText(name)}` : "말일 · 설정"}
+          </button>
         </div>
       </div>
       {client ? (
@@ -46706,6 +46723,7 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
           ))}
         </div>
       ) : <div className="px-5 py-3 text-[12.5px] text-[#7A89A3]">기본거래처에 등록되지 않은 거래처입니다 · 거래처관리 › 기본거래처에서 등록하면 정보와 결제 조건이 여기에 보입니다</div>}
+      <ClientCloseDayModal open={cdOpen} client={name} company={c.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""} isViewer={isViewer} onClose={() => setCdOpen(false)} />
     </div>
   );
 }
@@ -59008,7 +59026,7 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
     if (!_id) return;
     const row = knownPrev || dispatchData.find((d) => d._id === _id || d.id === _id);
     if (patch && !patch.__system && !mBypass) {
-      const lockOf = (o) => { const c = String(o?.거래처명 || "").trim(); if (!c) return null; const ym = String(o?.마감월 || "").slice(0, 7) || String(o?.상차일 || "").slice(0, 7); return isFinalLocked(mDesk.closes?.get(`${c}|${ym}`)) ? { client: c, ym } : null; };
+      const lockOf = (o) => { const c = String(o?.거래처명 || "").trim(); if (!c) return null; const ym = billYmOf(o); return isFinalLocked(mDesk.closes?.get(`${c}|${ym}`)) ? { client: c, ym } : null; };
       const fl = lockOf(row) || (row ? lockOf({ ...row, ...patch }) : null);
       if (fl) { window.alert(`${fl.client} ${Number(fl.ym.slice(5))}월은 최종마감 이후 수정이 불가합니다.\n필요 시 경리팀에 해제요청 해주세요.`); return false; }
     }

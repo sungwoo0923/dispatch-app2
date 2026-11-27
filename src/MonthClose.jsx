@@ -17,6 +17,11 @@ import useNarrow from "./useNarrow";
 import { MarginPct } from "./marginPct"; // ⭐ 2026-11-17 합계 줄 수수료 옆 수수료율(수수료 ÷ 청구)
 import { orderProfit, paidOut, nextFee } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 한 식 — 청구 − 기사 − 회사가 따로 준 지게차·특수운임(배차현황 표와 같음)
 import { kpConfirm } from "./kpDialog";
+import { closeRuleOf, clientPeriod, useCloseDaysVersion } from "./clientCloseDays"; // 🗓 2026-11-27 거래처별 마감일(25일 마감 → 10/26 ~ 11/25)
+import ClientCloseDayModal, { ClientCloseDateModal } from "./ClientCloseDayModal";
+const mdTxt = (d) => `${d.slice(5, 7)}.${d.slice(8, 10)}`;
+const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const dDay = (to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${kstToday()}T00:00:00Z`)) / 864e5);
 const StmtCompareModal = React.lazy(() => import("./StmtCompare")); // ⭐ 2026-11-17 업체 명세서 비교
 
 const NUM = { fontVariantNumeric: "tabular-nums" };
@@ -154,6 +159,11 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const [busy, setBusy] = React.useState("");
   const [toast, setToast] = React.useState("");
   const [cmpOpen, setCmpOpen] = React.useState(false); // ⭐ 2026-11-17 업체 명세서 비교(고른 거래처)
+  // 🗓 2026-11-27 거래처별 마감일 — 거르기("" 전체 · 0 말일 · 25 …) · 마감일 정하기 창
+  const cdVer = useCloseDaysVersion();
+  const [cdf, setCdf] = React.useState("");
+  const [cdOpen, setCdOpen] = React.useState("");
+  const [cdDate, setCdDate] = React.useState(""); // [마감날짜 변경] 이번 달만 끝 날짜
   React.useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 3200); return () => clearTimeout(t); }, [toast]);
   const openRow = (o) => { if (lockedOf(groupsRef.current.find((g) => g.client === (String(o.거래처명 || "").trim() || "(거래처 없음)")))) { setToast("최종마감 이후 수정이 불가합니다. 필요 시 경리팀에 해제요청 해주세요."); return; } return onOpenOrder && !phone ? onOpenOrder(o) : setSheet({ row: o }); };
   const groupsRef = React.useRef([]);
@@ -164,7 +174,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   };
 
   const staffOf = React.useCallback((o) => (staffName ? staffName(o) : "") || "미지정", [staffName]);
-  const month = React.useMemo(() => (orders || []).filter((o) => !isCancel(o) && o?.source !== "transport_transmit" && monthOf(o) === ym), [orders, ym]);
+  const month = React.useMemo(() => (orders || []).filter((o) => !isCancel(o) && o?.source !== "transport_transmit" && monthOf(o) === ym), [orders, ym, cdVer]); // eslint-disable-line react-hooks/exhaustive-deps
   const staffList = React.useMemo(() => { const m = new Map(); month.forEach((o) => { const s2 = staffOf(o); m.set(s2, (m.get(s2) || 0) + 1); }); return [...m.entries()].sort((a, b) => b[1] - a[1]); }, [month, staffOf]);
   const mineOf = React.useCallback((o) => isMine(o, me) || (!!me?.name && staffOf(o) === me.name), [me, staffOf]);
   const routeList = React.useMemo(() => { const m = new Map(); month.forEach((o) => { const r = String(o.담당노선구분 || "").trim(); if (r) m.set(r, (m.get(r) || 0) + 1); }); return [...m.entries()].sort((a, b) => b[1] - a[1]); }, [month]);
@@ -175,18 +185,21 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const issuesOfRow = React.useCallback((o) => { const l = [...(issueMap.get(idOf(o)) || [])]; if (!String(o.거래처명 || "").trim()) l.unshift({ key: "noClient", label: "거래처 빈칸", block: true }); return l; }, [issueMap]);
 
   const closeOf = React.useCallback((c, m) => desk.closes.get(`${c}|${m}`) || null, [desk.closes]);
-  const board = React.useMemo(() => new Map(closeBoard(orders, ym, { closeOf, me }).map((r) => [r.client, r])), [orders, ym, closeOf, me]);
+  const board = React.useMemo(() => new Map(closeBoard(orders, ym, { closeOf, me }).map((r) => [r.client, r])), [orders, ym, closeOf, me, cdVer]); // eslint-disable-line react-hooks/exhaustive-deps
   const groups = React.useMemo(() => {
     const m = new Map();
     scoped.forEach((o) => { const c = String(o.거래처명 || "").trim() || "(거래처 없음)"; const g = m.get(c) || { client: c, rows: [], sale: 0, buy: 0, paid: 0, issue: 0 }; g.rows.push(o); g.sale += n(o.청구운임); g.buy += n(o.기사운임); g.paid += paidOut(o); /* ⭐ 2026-11-17 회사 지급분 */ if (issuesOfRow(o).length) g.issue += 1; m.set(c, g); });
-    return [...m.values()].map((g) => { const b = board.get(g.client); return { ...g, count: g.rows.length, row: b || null, status: b?.status || "none", changed: !!b?.changed, owners: [...new Set(g.rows.map(staffOf))].slice(0, 2).join(", "),
+    return [...m.values()].map((g) => { const b = board.get(g.client); const cd = closeRuleOf(g.client)?.day || 0; return { ...g, cd, period: clientPeriod(g.client, ym), count: g.rows.length, row: b || null, status: b?.status || "none", changed: !!b?.changed, owners: [...new Set(g.rows.map(staffOf))].slice(0, 2).join(", "),
       rows: g.rows.sort((a, b2) => String(a.상차일 || "").localeCompare(String(b2.상차일 || "")) || String(a.상차시간 || "").localeCompare(String(b2.상차시간 || ""))) }; })
       .sort((a, b) => stOf(a).ord - stOf(b).ord || b.sale - a.sale);
-  }, [scoped, board, issuesOfRow, staffOf]);
+  }, [scoped, board, issuesOfRow, staffOf, ym, cdVer]); // eslint-disable-line react-hooks/exhaustive-deps
   groupsRef.current = groups;
   const bucket = (g) => (g.changed && g.status !== "none") || g.status === "none" || g.status === "rejected" ? "todo" : g.status === "verified" ? "verified" : "closed";
   const cnt = React.useMemo(() => { const c = { todo: 0, verified: 0, submitted: 0, approved: 0 }; groups.forEach((g) => { const b = bucket(g); if (b === "closed") c[g.status] += 1; else c[b] += 1; }); return c; }, [groups]);
-  const list = groups.filter((g) => (tab === "all" || bucket(g) === tab) && (!cq || g.client.replace(/\s/g, "").toLowerCase().includes(cq.replace(/\s/g, "").toLowerCase())));
+  const cdList = React.useMemo(() => { const m = new Map(); groups.forEach((g) => m.set(g.cd, (m.get(g.cd) || 0) + 1)); return [...m.entries()].sort((a, b) => (a[0] || 99) - (b[0] || 99)); }, [groups]);
+  // 마감 다가옴 · 지남(마감 전인 거래처만) — 이번 달 기간 끝 기준
+  const dueOf = (g) => { if (!g.cd || bucket(g) === "closed") return null; const d = dDay(g.period.to); return d < 0 ? { t: "마감 지남", c: "g" } : d <= 5 ? { t: d ? `D-${d}` : "오늘 마감", c: "r" } : null; };
+  const list = groups.filter((g) => (cdf === "" || g.cd === cdf) && (tab === "all" || bucket(g) === tab) && (!cq || g.client.replace(/\s/g, "").toLowerCase().includes(cq.replace(/\s/g, "").toLowerCase())));
   const allSubmit = groups.filter((g) => g.row && canSubmit(g.row));
   const cur = groups.find((g) => g.client === sel) || list[0] || null;
   React.useEffect(() => { if (cur && cur.client !== sel) setSel(cur.client); }, [cur?.client]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -265,6 +278,10 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
       <div className="mt-2 flex gap-1 flex-wrap" style={NUM}>
         {[["all", `전체 ${groups.length}`], ["todo", `검증 전 ${cnt.todo}`], ["verified", `검증 완료 ${cnt.verified}`], ["closed", `마감 ${cnt.submitted + cnt.approved}`]].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`h-7 px-2.5 rounded-lg text-[12px] font-black ${tab === k ? "bg-[#0F1A30] text-white" : "border border-[#DCE3EE] text-[#5B6B85] bg-white"}`}>{l}</button>)}
       </div>
+      {cdList.length > 1 && (
+        <div className="mt-1.5 flex gap-1 flex-wrap" style={NUM} data-kp="mc-closeday-filter">
+          {[["", `마감일 전체`], ...cdList.map(([d, c]) => [d, `${d ? `${d}일` : "말일"} ${c}`])].map(([k, l]) => <button key={String(k)} type="button" onClick={() => { setCdf(k); setSel(""); }} className={`h-7 px-2.5 rounded-lg text-[12px] font-black ${cdf === k ? "bg-[#1B2B4B] text-white" : k === "" ? "border border-[#DCE3EE] text-[#5B6B85] bg-white" : "border border-[#CFD9EC] text-[#2D4C82] bg-[#EEF2FA]"}`}>{l}</button>)}
+        </div>)}
       {!isViewer && allSubmit.length > 1 && <button type="button" disabled={!!busy} onClick={() => submitMany(allSubmit)} className="mt-2 w-full h-9 rounded-lg border border-[#0F1A30] text-[13px] font-black text-[#0F1A30] hover:bg-[#F4F6FA]">검증 완료 {allSubmit.length}곳 모두 1차 마감</button>}
       <div className="mt-2 flex xl:flex-col gap-1.5 overflow-x-auto xl:overflow-x-visible xl:max-h-[calc(100vh-360px)] xl:overflow-y-auto no-scrollbar">
         {!list.length && <div className="px-2 py-8 text-center text-[13px] font-bold text-[#9AA9C3] w-full">{groups.length ? "조건에 맞는 거래처가 없어요" : `${ymText(ym)} 오더가 없어요`}</div>}
@@ -276,6 +293,12 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
               <span className={`text-[14px] font-black truncate flex-1 ${on ? "text-white" : "text-[#0F1A30]"}`}>{g.client}</span>
               {on ? <span className="h-6 px-2 rounded-lg bg-white/15 text-white text-[11.5px] font-black inline-flex items-center whitespace-nowrap">{stOf(g).label}</span> : <Badge g={g} small />}
             </div>
+            {g.cd || g.period.changed ? (
+              <div className="mt-1 pl-7 flex items-center gap-1 flex-wrap text-[11.5px] font-black" style={NUM} data-kp="mc-closeday">
+                <span className={`h-5 px-1.5 rounded-md inline-flex items-center whitespace-nowrap ${on ? "bg-white/15 text-white border border-white/25" : "bg-[#EEF2FA] text-[#2D4C82] border border-[#CFD9EC]"}`}>{g.cd ? `${g.cd}일 마감` : "말일"}</span>
+                <span className={on ? "text-white/80" : "text-[#2D4C82]"}>{mdTxt(g.period.from)} ~ {mdTxt(g.period.to)}{g.period.changed ? " (변경)" : ""}</span>
+                {(() => { const du = dueOf(g); return du ? <span className={`h-5 px-1.5 rounded-md inline-flex items-center whitespace-nowrap ${du.c === "r" ? (on ? "bg-white text-[#0F1A30]" : "bg-[#1B2B4B] text-white") : on ? "bg-white/15 text-white/80" : "bg-[#F1F4F9] text-[#5B6B85]"}`}>{du.t}</span> : null; })()}
+              </div>) : null}
             <div className={`mt-0.5 pl-7 flex items-center justify-between gap-2 text-[12px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`} style={NUM}>
               <span className="truncate">{g.count}건{g.issue ? <span className={on ? "text-white" : "text-[#C62F25]"}> · 확인 {g.issue}</span> : null}</span>
               <span className={`whitespace-nowrap font-black ${on ? "text-white" : "text-[#0F1A30]"}`}>{won(g.sale)}</span>
@@ -297,6 +320,15 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
         <div className="min-w-0 mr-auto">
           <div className="text-[13px] font-bold text-[#5B6B85]" style={NUM}>{ymText(ym)} 월 마감{g.owners ? ` · 담당 ${g.owners}` : ""}</div>
           <div className="flex items-center gap-2 min-w-0"><span className="text-[19px] font-black text-[#0F1A30] truncate">{g.client}</span><Badge g={g} /></div>
+          {/* 🗓 2026-11-27 이번 마감 기간 — 거래처 마감일(비우면 1일 ~ 말일) · [마감일]로 바꾼다 */}
+          <div className="mt-1 flex items-center gap-2 flex-wrap text-[13px] font-bold" style={NUM} data-kp="mc-period">
+            <span className="text-[#5B6B85]">기간</span>
+            <span className="font-black text-[#0F1A30]">{g.period.from.replace(/-/g, ".")} ~ {g.period.to.slice(5).replace("-", ".")}</span>
+            <span className={`h-6 px-2 rounded-lg text-[12px] font-black inline-flex items-center ${g.cd ? "bg-[#EEF2FA] text-[#2D4C82] border border-[#CFD9EC]" : "bg-[#F1F4F9] text-[#5B6B85]"}`}>{g.cd ? `매달 ${g.cd}일 마감` : "말일 마감"}{g.period.first ? " · 첫 달" : ""}</span>
+            {g.period.changed && <span className="h-6 px-2 rounded-lg text-[12px] font-black inline-flex items-center bg-[#1B2B4B] text-white">이번 달 변경</span>}
+            {g.client !== "(거래처 없음)" && <button type="button" data-testid="mc-closeday-btn" onClick={() => setCdOpen(g.client)} className="h-6 px-2 rounded-lg border border-[#D5DDEA] bg-white text-[12px] font-black text-[#1B2B4B] hover:bg-[#F4F6FA]" title="매달 며칠에 마감하는지 정해요">마감일 설정</button>}
+            {g.client !== "(거래처 없음)" && <button type="button" data-testid="mc-closedate-btn" onClick={() => setCdDate(g.client)} className="h-6 px-2 rounded-lg border border-[#D5DDEA] bg-white text-[12px] font-black text-[#1B2B4B] hover:bg-[#F4F6FA]" title="이번 달만 끝 날짜를 바꿔요 · 다음 달은 그다음 날부터">마감날짜 변경</button>}
+          </div>
         </div>
         {list.length > 1 && idx >= 0 && (
           <div className="flex items-center gap-1">
@@ -399,6 +431,8 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
 
       {toast && <div className="fixed left-1/2 -translate-x-1/2 bottom-8 z-[100060] px-5 py-3 rounded-2xl bg-[#14213D] text-white text-[14px] font-bold shadow-[0_16px_40px_rgba(10,18,36,.3)]" role="status">{toast}</div>}
 
+      <ClientCloseDayModal open={!!cdOpen} client={cdOpen} company={company} isViewer={isViewer} onClose={() => setCdOpen("")} />
+      <ClientCloseDateModal open={!!cdDate} client={cdDate} company={company} ym={ym} isViewer={isViewer} onClose={() => setCdDate("")} />
       {/* ⭐ 2026-11-17 업체 명세서 비교 — 고른 거래처의 이 달 오더 전체(보기 · 노선 거르기와 상관없이)와 맞춘다 */}
       {cmpOpen && cur && (
         <React.Suspense fallback={null}>
