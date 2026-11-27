@@ -10,15 +10,17 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { bankText, formatAccount } from "./bankUtil";
 import { fmtPhone } from "./formatInput";
+import { cleanCols, tripCell as stmtCell } from "./fleetStmtCols"; // 🧾 2026-11-27 지급명세서 운행 내역 칸
 
 export const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const won = (n) => `${Math.round(Number(n) || 0).toLocaleString("ko-KR")}`;
 const NAVY = "#0F1A30";
 
 // ───────────── 지급명세서 ─────────────
-export function StatementDoc({ st, supplier = {} }) {
+export function StatementDoc({ st, supplier = {}, onTripClick }) {
   const trips = st.trips || [];
   const ded = st.deductions || [];
+  const COLS = cleanCols(st.cols); // 🧾 2026-11-27 회사 [명세서 칸 설정] — 없으면 기본 5칸
   return (
     <div style={{ background: "#fff", color: "#0F1A30", fontFamily: "'Noto Sans KR',sans-serif", width: "100%", maxWidth: 760, margin: "0 auto", borderRadius: 14, overflow: "hidden", border: "1px solid #E3E8F0" }}>
       <div style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", color: "#fff", padding: "20px 24px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
@@ -48,20 +50,21 @@ export function StatementDoc({ st, supplier = {} }) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, color: "#0B1428" }}>
           <thead>
             <tr style={{ background: "#EEF3FC" }}>
-              {["일자", "거래처", "상차", "하차", "운임"].map((h, i) => <th key={h} style={{ padding: "9px 10px", textAlign: i === 4 ? "right" : "left", fontWeight: 900, fontSize: 13.5, color: "#1B2B4B", borderBottom: "1.5px solid #C9D6EE", whiteSpace: "nowrap" }}>{h}</th>)}
+              {COLS.map((c, i) => <th key={c.k} style={{ padding: "9px 10px", textAlign: c.k === "fare" ? "right" : "left", fontWeight: 900, fontSize: 13.5, color: "#1B2B4B", borderBottom: "1.5px solid #C9D6EE", whiteSpace: "nowrap" }}>{c.label}</th>)}
             </tr>
           </thead>
           <tbody>
+            {/* 🧾 2026-11-27 칸은 회사 [명세서 칸 설정](st.cols) — 예전 명세서는 일자 · 거래처 · 상차 · 하차 · 운임 */}
             {trips.map((t, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #E3E8F0" }}>
-                <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>{String(t.date || "").slice(5)}</td>
-                <td style={{ padding: "8px 10px", fontWeight: 700 }}>{t.client}</td>
-                <td style={{ padding: "8px 10px", fontWeight: 600 }}>{t.from}</td>
-                <td style={{ padding: "8px 10px", fontWeight: 600 }}>{t.to}{t.via ? <div style={{ fontSize: 12, color: "#3A4A66", marginTop: 2 }}>경유 {t.via}</div> : null}</td>
-                <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{won(t.fare)}</td>
+              <tr key={i} onClick={onTripClick ? () => onTripClick(t) : undefined} title={onTripClick ? "누르면 오더 수정" : undefined} style={{ borderBottom: "1px solid #E3E8F0", cursor: onTripClick ? "pointer" : undefined }}>
+                {COLS.map((c) => c.k === "fare"
+                  ? <td key={c.k} style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{won(t.fare)}</td>
+                  : <td key={c.k} style={{ padding: "8px 10px", fontWeight: c.k === "client" || c.k === "date" ? 700 : 600, whiteSpace: ["date", "dropDate", "carNo", "ton"].includes(c.k) ? "nowrap" : undefined, fontFamily: ["date", "dropDate"].includes(c.k) ? MONO : undefined, fontVariantNumeric: "tabular-nums" }}>
+                      {stmtCell(t, c.k)}{c.k === "to" && t.via && !COLS.some((x) => x.k === "via") ? <div style={{ fontSize: 12, color: "#3A4A66", marginTop: 2 }}>경유 {t.via}</div> : null}
+                    </td>)}
               </tr>
             ))}
-            {!trips.length && <tr><td colSpan={5} style={{ padding: 14, textAlign: "center", color: "#5B6B85", fontWeight: 700 }}>운행 내역 없음</td></tr>}
+            {!trips.length && <tr><td colSpan={COLS.length} style={{ padding: 14, textAlign: "center", color: "#5B6B85", fontWeight: 700 }}>운행 내역 없음</td></tr>}
           </tbody>
         </table>
         <div style={{ marginTop: 16, display: "grid", gap: 2, fontSize: 15 }}>
