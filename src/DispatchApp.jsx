@@ -9117,13 +9117,26 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
     }
   }, [role]);
 
+  // 🔎 2026-11-27 화면 전환 역할(통합관리자 · 최고관리자 · 통합인사관리자) — 다른 화면에만 있는 메뉴 → 그 화면 키
+  //  통합 검색(Ctrl + K) · 도움말 센터에서 찾을 수 있게 하고, 누르면 그 화면으로 바꿔서 연다(handleMenuClick)
+  const otherViewMenus = React.useMemo(() => {
+    const out = {};
+    const views = roleView.views;
+    if (!views || execHome) return out;
+    const cur = roleView.view || views[0][0];
+    const DISPATCH_ONLY = ["배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회", "기사관리", "거래처관리", "매출관리", "지입차관리"];
+    if (cur !== "dispatch" && views.some(([k]) => k === "dispatch")) DISPATCH_ONLY.forEach((m) => { out[m] = "dispatch"; });
+    views.forEach(([k]) => { if (k !== cur && DEPT_MENUS[k] && k !== "exec") DEPT_MENUS[k].forEach((m) => { if (!(m in out)) out[m] = k; }); });
+    return out;
+  }, [roleView.views, roleView.view, execHome]);
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = async (m) => {
     // ✋ 작성 중인 문서(전자결재·증명서 등)가 있으면 먼저 저장할지 묻는다
     if (m !== menu && !(await confirmLeave())) return;
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) { openPlanLock(MENU_FEATURE[m]); return; }
     // 🧾 2026-11-14 운송 화면에서 정산관리 바로가기(홈 카드 · 검색)를 누르면 경리 화면으로 바꿔서 연다
-    const toView = switchViewFor(realRole, roleView.view, m);
+    //  🔎 2026-11-27 검색에서 고른 다른 화면 메뉴(지금 화면엔 없는 메뉴)도 그 화면으로 바꿔서 연다
+    const toView = switchViewFor(realRole, roleView.view, m) || (menuState(m) !== "ok" ? otherViewMenus[m] || "" : "");
     if (toView) { roleView.setView(toView); React.startTransition(() => setMenu(m)); return; }
     if (!deptMode && (role === "user" || role === "test") && blockedMenus.includes(m)) return;
     if (m !== "매출관리") setRevenueUnlocked(false);
@@ -9614,8 +9627,12 @@ return (
       <CloseInboxBanner inbox={closeInbox} onOpen={(x) => { handleMenuClick("정산관리"); setTimeout(() => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client: x.client, ym: x.ym } })), 120); }, 60); }} />
       {/* ★ 2026-11-12 자주 쓰는 메뉴(접었다 펴기) · 통합 검색 창 · 도움말 센터 — 지금 이 계정에 보이는 메뉴로 자동 구성 */}
       <QuickNav menu={menu} isMaster={realRole === "totalMaster"} /* 🔒 2026-11-18 도움말 '새 기능 · 바뀐 점'은 최고관리자만 */
-        menus={uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok")}
-        onGo={(m, code, key) => { handleMenuClick(m); if (code && key) setTimeout(() => emitSubnav(code, key), 0); }} />
+        menus={(() => { // 🔎 2026-11-27 지금 화면 메뉴 + (화면 전환 역할) 다른 화면에만 있는 메뉴 — 누르면 그 화면으로 바꿔서 연다
+          const cur = uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok");
+          const extra = Object.keys(otherViewMenus).filter((m) => !cur.includes(m) && menuState(m) !== "locked");
+          return [...cur, ...extra];
+        })()}
+        onGo={(m, code, key) => { const sw = !!otherViewMenus[m] && menuState(m) !== "ok"; handleMenuClick(m); if (code && key) setTimeout(() => emitSubnav(code, key), sw ? 400 : 0); }} />
 
 
       {/* 화주사 푸시 알림 — 상차 예정시각이 임박했는데 미처리인 오더를 화주사가 푸시하면 중앙에 확인 전까지 표시 */}
@@ -15509,7 +15526,20 @@ React.useEffect(() => { setCopyShowMore(false); }, [copyQ, copyFilterType]);
 const [copySelected, setCopySelected] = React.useState([]);
 
 // 🔥 오더 복사 전용 (유일한 진입점)
-const applyCopy = (r) => {
+// 🛠 2026-11-27 시간은 오전/오후가 붙은 값만 복사(예전 오더의 '09:00' · '9시'를 그대로 복사하면 시간칸엔 빈칸으로 보이는데 저장 때 "오전/오후를 함께 선택해주세요"로 막혔다)
+//  quick: 한 줄 빠른 등록 — 지난 노선의 시간 · 메모 · 원본 오더에만 적힌 담당자는 가져오지 않는다(문장에 없는 값이 조용히 들어오지 않게)
+const copyTimeOf = (t) => {
+  const s = String(t || "").trim();
+  if (/^오[전후] /.test(s)) return s;
+  const m = s.match(/^(\d{1,2}):(\d{2})$/); // 24시간 표기만 오전/오후로 바꾼다("9시"처럼 오전·오후를 모르는 값은 비운다)
+  if (!m) return "";
+  const h = Number(m[1]); const mm = Number(m[2]);
+  if (h > 23 || mm > 59) return "";
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${h < 12 ? "오전" : "오후"} ${hh}시${mm ? ` ${mm}분` : ""}`;
+};
+const applyCopy = (r, opt = {}) => {
+  const quick = opt.quick === true;
   bizSeedRef.current = String(r.청구사업자 || "").trim(); bizManualRef.current = null; // ⭐ 2026-11-03 청구 사업자 자동 맞춤에 복사한 오더의 사업자를 넘긴다
   const pickupPlace = findPlaceByName(r.상차지명);
   const dropPlace   = findPlaceByName(r.하차지명);
@@ -15531,14 +15561,14 @@ const applyCopy = (r) => {
     // ✅ 상차지
     상차지명: r.상차지명 || "",
     상차지주소: pickupPlace?.주소 || r.상차지주소 || "",
-    상차지담당자: pickupPlace?.담당자 || r.상차지담당자 || "",
-    상차지담당자번호: pickupPlace?.담당자번호 || r.상차지담당자번호 || "",
+    상차지담당자: pickupPlace?.담당자 || (quick ? "" : r.상차지담당자) || "",
+    상차지담당자번호: pickupPlace?.담당자번호 || (quick ? "" : r.상차지담당자번호) || "",
 
     // ✅ 하차지
     하차지명: r.하차지명 || "",
     하차지주소: dropPlace?.주소 || r.하차지주소 || "",
-    하차지담당자: dropPlace?.담당자 || r.하차지담당자 || "",
-    하차지담당자번호: dropPlace?.담당자번호 || r.하차지담당자번호 || "",
+    하차지담당자: dropPlace?.담당자 || (quick ? "" : r.하차지담당자) || "",
+    하차지담당자번호: dropPlace?.담당자번호 || (quick ? "" : r.하차지담당자번호) || "",
 
 // ✅ 경유지 복사 (두 필드 모두 체크 - length로 빈배열 vs 빈배열 처리)
 경유상차목록: (() => { const pa=(v)=>{if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}};const a=pa(r.경유상차목록);const b=pa(r.경유지_상차);return a.length?a:b; })(),
@@ -15555,13 +15585,13 @@ const applyCopy = (r) => {
     하차방법: r.하차방법 || "",
     상차일: todayStr,
     하차일: todayStr,
-    상차시간: r.상차시간 || "",
-    상차시간기준: r.상차시간기준 ?? null,
-    하차시간: r.하차시간 || "",
-    하차시간기준: r.하차시간기준 ?? null,
+    상차시간: quick ? "" : copyTimeOf(r.상차시간),
+    상차시간기준: quick || !copyTimeOf(r.상차시간) ? null : r.상차시간기준 ?? null,
+    하차시간: quick ? "" : copyTimeOf(r.하차시간),
+    하차시간기준: quick || !copyTimeOf(r.하차시간) ? null : r.하차시간기준 ?? null,
     지급방식: r.지급방식 || "",
     배차방식: "",
-    메모: r.메모 || "",
+    메모: quick ? "" : r.메모 || "",
     // 전달사항은 원본에서 "고정"을 눌러둔 경우에만 복사본으로 함께 넘어와야 한다 —
     // 고정하지 않고 저장한 오더의 전달사항은 그 오더에만 해당하는 일회성 내용이라
     // 오더복사/동일 노선 재입력 시 그대로 따라와서는 안 된다.
@@ -16009,7 +16039,7 @@ React.useEffect(() => {
       <>
         {/* ⭐ 2026-11-13 한 줄 빠른 등록 — 지난 노선을 찾아 오더복사와 같은 방식으로 채운다 */}
         {!isViewer && <QuickOrderLine rows={dispatchData} userCompany={userCompany} canMoney={canMoney} onApply={(row, o) => {
-          if (row) applyCopy(row);
+          if (row) applyCopy(row, { quick: true });
           // 🚚 2026-11-15 화물내용 · 상차→하차 이름도 한 줄에서(지난 노선이 없어도 적은 값은 채운다)
           setForm((p) => ({ ...p, ...(o.date ? { 상차일: o.date, 하차일: o.date } : {}), ...(o.ton ? { 차량톤수: o.ton, 톤수값: o.ton.replace("톤", ""), 톤수타입: "톤" } : {}), ...(o.kind ? { 차량종류: o.kind } : {}), ...(o.cargo ? { 화물내용: o.cargo } : {}), ...(!row && o.from ? { 상차지명: o.from } : {}), ...(!row && o.to ? { 하차지명: o.to } : {}) }));
           if (o.kind) setVehicleQuery(o.kind);
