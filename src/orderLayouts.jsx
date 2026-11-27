@@ -147,6 +147,7 @@ const K_AREAS = [
   r24(["hs", 8], ["hf", 8], ["hm", 9]),
   r24(["ss", 4], ["plate", 4], ["fsale", 4], ["fdrv", 4], ["memo", 9]),
   r24(["dname", 4], ["dphone", 4], ["ffee", 8], ["memo", 9]),
+  r24(["save", 25]),
 ];
 export function routeGrid(hiddenKeys, skin = "route") {
   if (skin === "k") {
@@ -322,13 +323,13 @@ ${area("deck", [...ALL.filter((n) => n !== "md"), "closeym"])}
 @media (max-width:1279px){${A("deck")}{column-gap:10px!important}}
 
 /* ═══════ K 카드형(사용자 확정 2026-11-27) — 24칸 + 달력 칸 · 카드 바탕 · 카드 제목 · 박스형 입력칸 ═══════ */
-.of-skin-k{display:block!important}
+.of-skin-k{display:flex!important;align-items:flex-start!important;gap:16px!important}
 .of-skin-k .kp-order-card{border:0!important;box-shadow:none!important;background:transparent!important;overflow:visible!important}
-${A("k")}{grid-template-columns:repeat(24,minmax(0,1fr)) 340px!important;column-gap:24px!important;row-gap:8px!important;grid-template-rows:auto 6px repeat(4,auto) 6px repeat(4,auto) 6px repeat(3,auto)!important;grid-auto-rows:auto;background:#F8FAFD!important;border:1px solid #E1E7F0!important;border-radius:18px!important;padding:14px 22px 18px!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 18px 40px rgba(16,24,40,.07)!important;overflow:visible!important}
+${A("k")}{grid-template-columns:repeat(24,minmax(0,1fr)) 340px!important;column-gap:24px!important;row-gap:8px!important;grid-template-rows:auto 6px repeat(4,auto) 6px repeat(4,auto) 6px repeat(3,auto) auto!important;grid-auto-rows:auto;background:#F8FAFD!important;border:1px solid #E1E7F0!important;border-radius:18px!important;padding:14px 22px 18px!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 18px 40px rgba(16,24,40,.07)!important;overflow:visible!important}
 .of-lay-k .kp-order-form > [data-of] label{margin-bottom:3px!important}
 .of-lay-k .kp-order-form input:not([type=checkbox]):not([type=radio]){min-height:34px!important;height:34px!important}
 .of-lay-k .kp-order-form textarea{min-height:64px!important}
-${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate", "ptime", "ddate", "dtime", "pq", "dq", "sw", "cal", "opt"])}
+${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate", "ptime", "ddate", "dtime", "pq", "dq", "sw", "cal", "opt", "save"])}
 .of-lay-k .kp-order-form > [data-of="head"]{display:none!important}
 .of-lay-k .of-k-dates,.of-lay-k .of-k-dates > .kp-date-row{display:contents!important}
 .of-lay-k .kp-date-row > [data-of]{grid-area:var(--a)!important;min-width:0;position:relative;z-index:1}
@@ -339,6 +340,9 @@ ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate
 .of-lay-k .kp-date-row > [data-of="sw"]{--a:sw;align-self:center;justify-self:center}
 .of-lay-k .kp-date-row > [data-k-hide]{display:none!important}
 .of-lay-k .kp-date-row > [data-of="pdate"],.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="ddate"],.of-lay-k .kp-date-row > [data-of="dtime"]{padding-top:24px;display:flex;align-items:center;gap:6px}
+.of-lay-k .kp-date-row > [data-of="pdate"],.of-lay-k .kp-date-row > [data-of="ddate"]{justify-self:end}
+.of-lay-k .kp-order-form > [data-of="save"]{margin:4px 0 0!important;padding:10px 0 0!important;border-top:1px solid #E6EBF3!important;align-items:center}
+.of-lay-k .kp-order-form > [data-of="save"] button[type=submit]{height:46px!important;padding:0 40px!important;font-size:15.5px!important;border-radius:12px!important;background:linear-gradient(135deg,#0F1A30,#1B2B4B 55%,#2D4C82)!important;box-shadow:0 10px 22px rgba(15,26,48,.3)!important}
 .of-lay-k .kp-date-row > [data-of="pdate"]::before,.of-lay-k .kp-date-row > [data-of="ddate"]::before{position:absolute;top:0;left:0;font-size:12px;font-weight:800;color:#2A3852;white-space:nowrap}
 .of-lay-k .kp-date-row > [data-of="pdate"]::before{content:"상차 일시 *"}.of-lay-k .kp-date-row > [data-of="ddate"]::before{content:"하차 일시 *"}
 /* 상 · 하차 교체 — 가운데 세로 */
