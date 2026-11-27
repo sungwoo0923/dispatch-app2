@@ -388,7 +388,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
           </div>
         ) : (
           <div className="overflow-auto max-h-[calc(100vh-430px)] min-h-[200px]">
-            <table className="kp-sd kp-grid w-full" style={{ ...NUM, minWidth: 900 }}>
+            <table className="kp-sd kp-grid kp-sticky-head w-full" style={{ ...NUM, minWidth: 900 }}>{/* 🛠 2026-11-27 내려도 칸 이름(머리줄)이 따라오게 */}
               <thead><tr className="text-[12.5px] text-[#5B6B85]">
                 {["순번", "상차일", "상차지 → 하차지", "톤수", "차량번호", "기사", "청구", "기사운임", "수수료", "확인", ""].map((h, i) => <th key={i} className="px-2.5 py-2 font-black sticky top-0 bg-[#F8FAFD] z-[1] whitespace-nowrap text-center">{h}</th>)}
               </tr></thead>

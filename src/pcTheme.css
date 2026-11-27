@@ -233,6 +233,8 @@
 .kp-pc .kp-grid thead {
   background: linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2A4677 100%) !important;
 }
+/* 🛠 2026-11-27 월 마감 오더 표 — 스크롤해도 머리줄이 보이게: 칸(th)은 투명이라 머리줄(thead) 통째로 고정 */
+.kp-pc .kp-grid.kp-sticky-head thead { position: sticky; top: 0; z-index: 3; }
 .kp-pc .kp-grid thead th {
   background: transparent !important;
   color: rgba(255, 255, 255, 0.92) !important;
