@@ -570,7 +570,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                       <defs><linearGradient id="exLabor" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={EX.goldHi} /><stop offset="100%" stopColor={EX.goldDeep} stopOpacity={0.75} /></linearGradient></defs>
                       <XAxis dataKey="k" {...chartTheme.axis} tick={{ ...chartTheme.axis.tick, fontSize: 11 }} interval={0} />
                       <Tooltip content={(p) => <ExecTooltip {...p} unit="" fmt={(v) => `${fmtWon(v)}원`} />} cursor={chartTheme.cursor} />
-                      <Bar dataKey="v" name="인건비" radius={[6, 6, 2, 2]} maxBarSize={26} label={{ position: "top", content: ({ x, y, width, index, value }) => (labor[index]?.m === laborBase.m && value ? <text x={x + width / 2} y={y - 6} textAnchor="middle" fill={EX.goldHi} fontSize={11} fontWeight={800} fontFamily={EX_NUM.fontFamily}>{axisMoney(value)}</text> : null) }}>
+                      <Bar isAnimationActive={false} dataKey="v" name="인건비" radius={[6, 6, 2, 2]} maxBarSize={26} label={{ position: "top", content: ({ x, y, width, index, value }) => (labor[index]?.m === laborBase.m && value ? <text x={x + width / 2} y={y - 6} textAnchor="middle" fill={EX.goldHi} fontSize={11} fontWeight={800} fontFamily={EX_NUM.fontFamily}>{axisMoney(value)}</text> : null) }}>
                         {labor.map((x) => <Cell key={x.m} fill={x.m === laborBase.m ? "url(#exLabor)" : "rgba(143,176,240,.28)"} />)}
                       </Bar>
                     </BarChart>
@@ -653,12 +653,13 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                   <YAxis yAxisId="w" tickFormatter={axisMoney} {...chartTheme.axis} width={50} />
                   <YAxis yAxisId="m" orientation="right" tickFormatter={(v) => `${v}%`} {...chartTheme.axis} tick={{ ...chartTheme.axis.tick, fill: "rgba(215,188,130,.7)" }} width={40} />
                   <Tooltip content={chartTip} cursor={chartTheme.cursor} />
-                  <Bar yAxisId="w" dataKey="sale" name="매출" radius={[7, 7, 2, 2]} maxBarSize={30}
+                  {/* ⚡ 2026-11-27 속도 — HOME 차트 애니메이션 끔(다시 그릴 때마다 움직여 CPU를 썼다) */}
+                  <Bar isAnimationActive={false} yAxisId="w" dataKey="sale" name="매출" radius={[7, 7, 2, 2]} maxBarSize={30}
                     label={{ position: "top", content: ({ x, y, width, index, value }) => (monthly[index]?.cur ? <text x={x + width / 2} y={y - 7} textAnchor="middle" fill={EX.goldHi} fontSize={11.5} fontWeight={800} fontFamily={EX_NUM.fontFamily}>{axisMoney(value)}</text> : null) }}>
                     {monthly.map((x) => <Cell key={x.k} fill={x.cur ? "url(#exSaleCur)" : "url(#exSale)"} />)}
                   </Bar>
-                  <Bar yAxisId="w" dataKey="profit" name="매출총이익" fill="rgba(75,108,183,.55)" radius={[7, 7, 2, 2]} maxBarSize={30} />
-                  <Line yAxisId="m" dataKey="margin" name="이익률" stroke={EX.gold} strokeWidth={2.2} connectNulls dot={{ r: 3, fill: EX.bg1, stroke: EX.gold, strokeWidth: 2 }} activeDot={{ r: 5, fill: EX.gold }} />
+                  <Bar isAnimationActive={false} yAxisId="w" dataKey="profit" name="매출총이익" fill="rgba(75,108,183,.55)" radius={[7, 7, 2, 2]} maxBarSize={30} />
+                  <Line isAnimationActive={false} yAxisId="m" dataKey="margin" name="이익률" stroke={EX.gold} strokeWidth={2.2} connectNulls dot={{ r: 3, fill: EX.bg1, stroke: EX.gold, strokeWidth: 2 }} activeDot={{ r: 5, fill: EX.gold }} />
                 </ComposedChart>
               ) : (
                 <AreaChart data={daily} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
@@ -667,8 +668,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                   <XAxis dataKey="k" interval={4} {...chartTheme.axis} />
                   <YAxis tickFormatter={axisMoney} {...chartTheme.axis} width={50} />
                   <Tooltip content={chartTip} cursor={{ stroke: EX.lineHi }} />
-                  <Area dataKey="sale" name="매출" stroke="#CFE0FF" strokeWidth={2} fill="url(#exArea)" />
-                  <Area dataKey="profit" name="매출총이익" stroke={EX.gold} strokeWidth={1.8} fill="transparent" />
+                  <Area isAnimationActive={false} dataKey="sale" name="매출" stroke="#CFE0FF" strokeWidth={2} fill="url(#exArea)" />
+                  <Area isAnimationActive={false} dataKey="profit" name="매출총이익" stroke={EX.gold} strokeWidth={1.8} fill="transparent" />
                 </AreaChart>
               )}
             </ResponsiveContainer>

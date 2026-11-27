@@ -90,7 +90,11 @@ export default defineConfig({
         handler(html, ctx) {
           const files = (re) => {
             const b = ctx.bundle; if (!b) return [];
-            const start = Object.values(b).find((c) => c.type === "chunk" && re.test(String(c.facadeModuleId || "").replace(/\\/g, "/")));
+            // 🛠 2026-11-27 배차 프로그램(PC) 미리받기 목록이 비어 있던 버그 — DispatchApp 묶음은 다른 화면 조각과 합쳐져 facadeModuleId 가 비어 있다.
+            //  그래서 facade 로 못 찾으면 그 파일이 들어 있는 동적 묶음(moduleIds)으로 찾는다
+            const norm = (id) => String(id || "").replace(/\\/g, "/");
+            const start = Object.values(b).find((c) => c.type === "chunk" && re.test(norm(c.facadeModuleId)))
+              || Object.values(b).find((c) => c.type === "chunk" && c.isDynamicEntry && (c.moduleIds || Object.keys(c.modules || {})).some((id) => re.test(norm(id))));
             if (!start) return [];
             const out = new Set(); const walk = (c) => { if (!c || out.has(c.fileName)) return; out.add(c.fileName); (c.imports || []).forEach((f) => walk(b[f])); };
             walk(start);

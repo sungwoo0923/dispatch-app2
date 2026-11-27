@@ -408,14 +408,15 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
                 <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: "rgba(207,224,255,.7)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} interval={range === "30d" ? 3 : 0} dy={6} />
                 <YAxis axisLine={false} tickLine={false} width={46} tick={{ fontSize: 12.5, fill: "rgba(207,224,255,.6)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
                 <Tooltip content={<DarkTip />} cursor={{ stroke: "rgba(143,176,240,.35)", strokeDasharray: "3 3" }} />
+                {/* ⚡ 2026-11-27 속도 — HOME 차트는 그리는 애니메이션을 끈다(시계 · 실시간 값이 바뀔 때마다 다시 움직여 대기 중에도 CPU 24~31%를 썼다). 모양 · 값은 같다 */}
                 {range === "year" ? (
-                  <Bar dataKey="s" name="매출" radius={[6, 6, 0, 0]} barSize={22}>
+                  <Bar isAnimationActive={false} dataKey="s" name="매출" radius={[6, 6, 0, 0]} barSize={22}>
                     {trend.map((x) => <Cell key={x.label} fill={x.on ? "url(#hdBar)" : "rgba(110,149,232,.35)"} />)}
                   </Bar>
                 ) : (
-                  <Area type="monotone" dataKey="s" name="매출" stroke={C.glow} strokeWidth={2.6} fill="url(#hdArea)" dot={false} activeDot={{ r: 5, fill: "#fff", stroke: C.glow, strokeWidth: 3 }} animationDuration={800} />
+                  <Area isAnimationActive={false} type="monotone" dataKey="s" name="매출" stroke={C.glow} strokeWidth={2.6} fill="url(#hdArea)" dot={false} activeDot={{ r: 5, fill: "#fff", stroke: C.glow, strokeWidth: 3 }} />
                 )}
-                <Line type="monotone" dataKey="p" name="수익" stroke={C.hi} strokeWidth={1.8} strokeDasharray="5 4" dot={false} animationDuration={800} />
+                <Line isAnimationActive={false} type="monotone" dataKey="p" name="수익" stroke={C.hi} strokeWidth={1.8} strokeDasharray="5 4" dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -548,8 +549,8 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
                 <XAxis dataKey="h" axisLine={false} tickLine={false} tick={{ fontSize: 12.5, fill: "rgba(207,224,255,.7)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={(h) => `${h}시`} interval={1} />
                 <YAxis allowDecimals={false} axisLine={false} tickLine={false} width={24} tick={{ fontSize: 12, fill: "rgba(207,224,255,.6)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                 <Tooltip cursor={{ fill: "rgba(143,176,240,.08)" }} contentStyle={{ background: "rgba(11,20,40,.96)", border: `1px solid ${C.line}`, borderRadius: 10, color: C.ink, fontSize: 13.5, fontWeight: 700 }} labelFormatter={(h) => `${h}${L.timeTip}`} formatter={(v, n) => [`${v}건`, n === "t" ? "오늘" : "내일"]} />
-                <Bar dataKey="t" fill={C.glow} radius={[4, 4, 0, 0]} barSize={9} />
-                <Bar dataKey="n" fill="rgba(143,176,240,.35)" radius={[4, 4, 0, 0]} barSize={9} />
+                <Bar isAnimationActive={false} dataKey="t" fill={C.glow} radius={[4, 4, 0, 0]} barSize={9} />
+                <Bar isAnimationActive={false} dataKey="n" fill="rgba(143,176,240,.35)" radius={[4, 4, 0, 0]} barSize={9} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -561,7 +562,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
               <div style={{ width: 120, height: 120, position: "relative", flexShrink: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={ops.cars} dataKey="v" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={2} stroke="none">
+                    <Pie isAnimationActive={false} data={ops.cars} dataKey="v" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={2} stroke="none">
                       {ops.cars.map((x, i) => <Cell key={x.name} fill={CAR_SHADES[i % CAR_SHADES.length]} />)}
                     </Pie>
                   </PieChart>

@@ -5,7 +5,7 @@
 //  ③ 아래 기사님별 합계(직접 고칠 수 있음) → [저장] = drivers/{id}.주유비[달] (지급명세서 자동 공제 "주유비")
 import React from "react";
 import { createPortal } from "react-dom";
-import * as XLSX from "xlsx";
+const loadXLSX = () => import("xlsx"); // ⚡ 2026-11-27 속도 — 엑셀을 올릴 때 받는다
 import { arrayUnion, deleteField, doc, setDoc } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { parseFuelSheet, matchFuelRow, sumByDriver, cardLast4, fuelOf } from "./fleetFuel";
@@ -45,6 +45,7 @@ export default function FleetFuelImport({ open, ym, drivers = [], onClose }) {
     if (!f) return; setErr("");
     try {
       const buf = await f.arrayBuffer();
+      const XLSX = await loadXLSX();
       const wb = XLSX.read(buf, { type: "array", cellDates: false });
       let best = null;
       wb.SheetNames.forEach((n) => { const aoa = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: "" }); const p = parseFuelSheet(aoa, { year: Number(ym.slice(0, 4)) }); if (!best || p.rows.length > best.rows.length) best = p; });

@@ -4,6 +4,9 @@
 //  점수: 업체명 완전일치 > 앞글자 일치 > 포함, 같은 점수는 업체명 → 주소 순.
 //  2026-11-19 DispatchApp.jsx 에서 옮김 — 오더등록 폼과 일괄수정 · 복사 창이 같은 검색을 쓴다
 const _pqN = (s) => String(s || "").toLowerCase().replace(/[\s()（）\-]/g, "");
+// ⚡ 2026-11-27 오더등록 입력 지연 — 글자 칠 때마다 수천 건을 localeCompare(…, "ko")로 정렬하면 비교마다 정렬 규칙을 새로 만든다.
+//  같은 규칙(Intl.Collator "ko")을 한 번 만들어 쓴다 — 순서는 똑같고 2~3배 빠르다
+const KO = typeof Intl !== "undefined" && Intl.Collator ? new Intl.Collator("ko") : { compare: (a, b) => a.localeCompare(b, "ko") };
 export function placeSearch(list, q) {
   const toks = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!toks.length) return [];
@@ -27,5 +30,5 @@ export function placeSearch(list, q) {
     }
     if (sc) out.push({ ...p, __score: sc });
   });
-  return out.sort((a, b) => b.__score - a.__score || String(a.업체명 || "").localeCompare(String(b.업체명 || ""), "ko") || String(a.주소 || "").localeCompare(String(b.주소 || ""), "ko"));
+  return out.sort((a, b) => b.__score - a.__score || KO.compare(String(a.업체명 || ""), String(b.업체명 || "")) || KO.compare(String(a.주소 || ""), String(b.주소 || "")));
 }
