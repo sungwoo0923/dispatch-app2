@@ -7,7 +7,7 @@ import { useFleetDispatchWayInstall, FleetDispatchWayButton } from "./fleetDispa
 import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
 import { fareBaseSale, effectiveFareRule as fareEffRule, farePctOf as farePctOfO, applyFareRule as fareApply, ruleDriverFare as fareRuleDrv, toNum as fareToNum } from "./fareRulesCore.js"; // 🧾 2026-11-25 운임명세서 운임구분 %
 import { MENU_FEATURE, planIncludes, openPlanLock, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
-import { kpConfirm, kpPrompt } from "./kpDialog";
+import { kpConfirm, kpPrompt, kpChoose } from "./kpDialog";
 import { editLossReason, lossReasonOf } from "./lossReason"; // 📑 2026-11-15 손실 오더 손실 사유
 import { runDelete, commitDeletes, deleteDocsAtomic, runUpload, runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 runBulkTask — 일괄 저장 · 수정 진행 창
 import { SHEET_LINK_FIELDS, stripSheetLink } from "./sheetLinkFields"; // ⭐ 2026-11-17 복사본에 구글시트 줄 주소를 넘기지 않는다 // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
@@ -3217,8 +3217,8 @@ import { pickUnassignedOrders } from "./unassignedRule"; // ⭐ 2026-11-05 PC·�
 import { useBadgeSeenSync, useUnseenItems, useMarkSeenOnView, unionCount } from "./seenBadges"; // ⭐ 2026-11-06 메뉴 숫자 = 계정별 안 본 것
 import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
-import { bumpDriverPayout, addClientCollection, removeClientCollections, setDriverPayAdjust } from "./ledgerAuto";
-import { payLedgerPlan, settleGapPlan, payGapOf, isPaidThenCanceled, paidEditGuard, paidDeleteWarn } from "./payCore"; // 💸 2026-11-25 지급한 금액 기록(지급액)
+import { bumpDriverPayout, addClientCollection, removeClientCollections, setDriverPayAdjust, payFundInfo, setPayFundDefault } from "./ledgerAuto";
+import { payLedgerPlan, settleGapPlan, payGapOf, isPaidThenCanceled, paidEditGuard, paidDeleteWarn, payTransferOf, PAY_VAT_RATE, paidVatOf } from "./payCore"; // 💸 2026-11-25 지급한 금액 기록(지급액)
 // 💸 지급한 오더를 고칠 때 확인 — 여러 건을 한 번에 고쳐도 창이 줄줄이 뜨지 않게(한 번 [네]면 10초 동안은 다시 묻지 않는다)
 let _paidEditAckUntil = 0; let _paidEditAsk = null;
 const confirmPaidEdit = (msg) => {
@@ -51768,6 +51768,13 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     });
     return set;
   }, [payDrivers]);
+  // 💸 2026-11-27 세금계산서 받는 기사(기사관리 '세금계산서 발행') — 지급완료 때 부가세 포함 이체액으로 장부에
+  const invoicePlates = useMemo(() => {
+    const set = new Set();
+    (payDrivers || []).forEach((d) => { if (d.세금계산서발행 !== true) return; const pl = normalizePlate(d.차량번호 || d.carNo || ""); if (pl && pl !== "-") set.add(pl); });
+    return set;
+  }, [payDrivers]);
+  const isInvoiceRow = (r) => invoicePlates.has(normalizePlate(r?.차량번호 || ""));
   const driversReady = Array.isArray(payDrivers); // 기사 목록이 오기 전엔 지입 차량을 가려낼 수 없어 잠깐 비워 둔다
   const base = useMemo(
     // 💳 2026-11-11 IN(우리 오더를 용차 기사가 잡은 것)만 — OUT(외부 콜을 잡은 오더)은 정산관리 › 입금 확인에서 본다(시험 기능 운송사)
@@ -51854,20 +51861,51 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   // 🔗 2026-11-01 지급완료/취소 → 수입·지출 장부(지급일별 "기사운임 지급")에 자동 반영
   // 💸 2026-11-25 장부는 오더에 남긴 지급액(지급완료 때 기사운임)으로 더하고 뺀다 — 지급 뒤 운임을 고쳐도 장부가 틀어지지 않게(src/payCore.js)
   //   row = 바꾸기 전 오더 · keepAmount = 지급일만 옮기기
-  const syncPayLedger = (row, nextStatus, nextDate, { keepAmount = false } = {}) => {
+  const syncPayLedger = (row, nextStatus, nextDate, { keepAmount = false, fundId = "" } = {}) => {
     if (!row) return;
     const wasPaid = (row.지급상태 || "지급중") === "지급완료";
     const co = companyName || row.companyName || "";
-    const plan = payLedgerPlan(row, { status: nextStatus, date: nextDate, keepAmount }, todayStr9());
-    plan.bumps.forEach((b) => bumpDriverPayout(db, { ...b, company: co }).catch(() => {}));
+    const plan = payLedgerPlan(row, { status: nextStatus, date: nextDate, keepAmount, vatRate: isInvoiceRow(row) ? PAY_VAT_RATE : 0 }, todayStr9());
+    plan.bumps.forEach((b) => bumpDriverPayout(db, { ...b, company: co, fundId }).catch(() => {}));
     if (plan.adjAmount != null && row._id) setDriverPayAdjust(db, { orderId: row._id, amount: plan.adjAmount, date: todayStr9(), company: co, who: row.이름 || "" }).catch(() => {});
     // 📩 2026-11-11 지급완료 → 기사에게 입금 안내 문자(시험 기능 · 스위치를 켠 경우만 · 같은 기사는 한 통으로 묶음)
     if (nextStatus === "지급완료" && !wasPaid && payNoticeBeta) queuePayNotice({ row, date: nextDate, company: co, patchDispatch });
   };
   // 오더에 저장할 칸(지급상태 · 지급일 · 지급액 · 지급액기록일 …) — 오더를 못 찾으면 예전처럼 상태 · 날짜만
   const payPatchOf = (row, status, date, keepAmount = false) => (row
-    ? { ...payLedgerPlan(row, { status, date, keepAmount }, todayStr9()).patch, __system: true }
+    ? { ...payLedgerPlan(row, { status, date, keepAmount, vatRate: isInvoiceRow(row) ? PAY_VAT_RATE : 0 }, todayStr9()).patch, __system: true }
     : { 지급상태: status, 지급일: date, __system: true });
+  // 💸 2026-11-27 출금 통장 — 자금관리에 '기사운임 지급' 기본 통장이 없으면 지급완료 때 고르게 한다(고른 통장은 기본 통장으로 정해 둠)
+  //  → { fundId, label } · 취소하면 null. 통장 목록을 못 읽는 계정이면 빈칸(장부에만 기록)
+  const askPayFund = async () => {
+    const info = await payFundInfo(db, companyName, "drvpay");
+    if (info.def) return { fundId: info.def.id, label: info.def.name || "기본 통장" };
+    if (!info.readable) return { fundId: "", label: "정해지지 않음(통장 잔액엔 반영 안 돼요)" };
+    if (!info.funds.length) {
+      const go = await kpConfirm("기사운임을 내보낼 통장이 아직 없어요.\n이대로 지급완료하면 장부에만 기록되고 통장 잔액은 그대로예요.\n자금관리 › 통장 설정에서 통장을 등록하고 ‘기사운임 지급’ 기본 통장으로 정해 주세요.", { title: "출금 통장 없음", okText: "통장 없이 기록", cancelText: "취소" });
+      return go ? { fundId: "", label: "없음(통장 잔액엔 반영 안 돼요)" } : null;
+    }
+    const NONE = "__none__";
+    const v = await kpChoose("기사운임을 어느 통장에서 보냈나요?\n고른 통장이 ‘기사운임 지급’ 기본 통장으로 정해져서 다음부터는 묻지 않아요(자금관리 › 통장 설정에서 바꿀 수 있어요).", [
+      ...info.funds.map((f) => ({ value: f.id, label: f.name || f.bank || "통장", sub: [f.bank, f.number ? `끝자리 ${String(f.number).slice(-4)}` : ""].filter(Boolean).join(" · ") })),
+      { value: NONE, label: "통장 없이 기록", sub: "장부에만 남고 통장 잔액은 그대로예요" },
+    ], { title: "출금 통장 고르기", okText: "이 통장으로" });
+    if (v == null) return null;
+    if (v === NONE) return { fundId: "", label: "없음(통장 잔액엔 반영 안 돼요)" };
+    const f = info.funds.find((x) => x.id === v);
+    await setPayFundDefault(db, v, "drvpay");
+    return { fundId: v, label: f?.name || "고른 통장" };
+  };
+  // 💸 2026-11-27 지급완료 확인 문구 — 이체 합계(부가세 포함 여부) · 지급일 · 출금 통장
+  const payConfirmText = (rows, date, fund) => {
+    const t = rows.reduce((a, r) => { const x = payTransferOf(r, isInvoiceRow(r)); return { supply: a.supply + x.supply, vat: a.vat + x.vat, inv: a.inv + (x.vat ? 1 : 0) }; }, { supply: 0, vat: 0, inv: 0 });
+    return [
+      `이체 합계 ${won(t.supply + t.vat)}원`,
+      t.vat ? `기사운임 ${won(t.supply)}원 + 부가세 ${won(t.vat)}원(세금계산서 받는 기사 ${t.inv}건)` : `기사운임 ${won(t.supply)}원(부가세 없음)`,
+      `지급일 ${date} · 출금 통장 ${fund.label}`,
+      "수입·지출 장부에 지출로 기록돼요.",
+    ].join("\n");
+  };
   // 지급일만 고치기(지급완료 상태 그대로)
   const changePayDate = async (row, d) => {
     if (!patchDispatch || !row || !d || d === (row.지급일 || "")) return;
@@ -51875,13 +51913,13 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     await patchDispatch(row._id, payPatchOf(row, "지급완료", d, true));
     syncPayLedger(row, "지급완료", d, { keepAmount: true });
   };
-  const pay = async (id, status) => {
+  const pay = async (id, status, fundId = "") => {
     if (!patchDispatch) return alert("저장 기능이 연결되지 않아 처리할 수 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.");
     const row = (dispatchData || []).find((r) => r._id === id);
     const date = status === "지급완료" ? (selectedPayDate || todayStr9()) : "";
     if (row && (row.지급상태 || "지급중") === status && (row.지급일 || "") === date) return; // 바뀐 게 없으면 장부도 그대로
     await patchDispatch(id, payPatchOf(row, status, date));
-    syncPayLedger(row, status, date);
+    syncPayLedger(row, status, date, { fundId });
   };
   // 💸 지급 후 운임 변경 — [추가 지급]/[환수 처리]: 차액만 조정 한 줄로(같은 오더는 한 줄 · 누적 금액이라 두 번 눌러도 같은 값)
   const settleGap = async (row) => {
@@ -51890,15 +51928,22 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     if (!plan) return;
     const who = `${row.이름 || "기사"}${row.차량번호 ? ` (${row.차량번호})` : ""}`;
     const plus = plan.gap > 0;
-    if (!(await kpConfirm(`${plus ? "추가 지급" : "환수 처리"}할까요?\n${who} · ${row.상차일 || ""}\n지급한 돈 ${won(toInt(row.기사운임) - plan.gap)}원 → 지금 기사운임 ${won(row.기사운임)}원\n${plus ? `${won(plan.gap)}원을 더 드린 것으로` : `${won(-plan.gap)}원을 돌려받은 것으로`} 장부에 남겨요.`, { title: plus ? "추가 지급" : "환수 처리", okText: "네", cancelText: "취소" }))) return;
+    const gapVat = paidVatOf(row) ? Math.round(Math.abs(plan.gap) * PAY_VAT_RATE) : 0; // 💸 2026-11-27 부가세 포함 이체한 오더면 차액도 부가세 포함
+    const gapTxt = `${won(Math.abs(plan.gap) + gapVat)}원${gapVat ? `(차액 ${won(Math.abs(plan.gap))} + 부가세 ${won(gapVat)})` : ""}`;
+    if (!(await kpConfirm(`${plus ? "추가 지급" : "환수 처리"}할까요?\n${who} · ${row.상차일 || ""}\n지급한 돈 ${won(toInt(row.기사운임) - plan.gap)}원 → 지금 기사운임 ${won(row.기사운임)}원\n${plus ? `${gapTxt}을 더 드린 것으로` : `${gapTxt}을 돌려받은 것으로`} 장부에 남겨요.\n장부 날짜 ${todayStr9()}`, { title: plus ? "추가 지급" : "환수 처리", okText: "네", cancelText: "취소" }))) return;
     await patchDispatch(row._id, { ...plan.patch, __system: true });
-    setDriverPayAdjust(db, { orderId: row._id, amount: plan.adjAmount, date: todayStr9(), company: companyName || row.companyName || "", who: row.이름 || "" }).catch(() => {});
+    setDriverPayAdjust(db, { orderId: row._id, amount: plan.adjAmount, vat: plan.adjVat, date: todayStr9(), company: companyName || row.companyName || "", who: row.이름 || "" }).catch(() => {});
   };
 
   const bulkPay = async (ids, status) => {
     if (!ids.length) return alert("처리할 건을 먼저 선택해 주세요.");
-    if (!(await kpConfirm(`${ids.length}건을 ${status === "지급완료" ? "지급완료" : status}하시겠습니까?`, { title: status, okText: "네", cancelText: "취소" }))) return;
-    await runBulkTask({ count: ids.length, label: "오더", verb: status === "지급완료" ? "지급 처리" : `${status} 처리`, task: (progress) => { let k = 0; return Promise.all(ids.map(id => pay(id, status).finally(() => progress(++k)))); } });
+    let fund = { fundId: "" };
+    if (status === "지급완료") {
+      fund = await askPayFund(); if (!fund) return;
+      const rows = ids.map((id) => (dispatchData || []).find((r) => r._id === id)).filter(Boolean);
+      if (!(await kpConfirm(`${ids.length}건을 지급완료하시겠습니까?\n${payConfirmText(rows, selectedPayDate || todayStr9(), fund)}`, { title: "지급완료", okText: "네", cancelText: "취소" }))) return;
+    } else if (!(await kpConfirm(`${ids.length}건을 ${status}하시겠습니까?`, { title: status, okText: "네", cancelText: "취소" }))) return;
+    await runBulkTask({ count: ids.length, label: "오더", verb: status === "지급완료" ? "지급 처리" : `${status} 처리`, task: (progress) => { let k = 0; return Promise.all(ids.map(id => pay(id, status, fund.fundId).finally(() => progress(++k)))); } });
     setSelectedIds(new Set());
     alert(`${ids.length}건을 ${status} 처리했습니다.`);
   };
@@ -51908,8 +51953,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     const unpaid = rows.filter(r => (r.지급상태 || "지급중") !== "지급완료");
     if (!unpaid.length) return alert("미지급 건이 없습니다.");
     const unpaidSum = unpaid.reduce((s, r) => s + toInt(r.기사운임), 0);
-    if (!(await kpConfirm(`${rows[0]?.이름 || "이 기사"}의 미지급 ${unpaid.length}건(${unpaidSum.toLocaleString()}원)을 지급완료 처리하시겠습니까?`, { title: "지급완료", okText: "지급완료", cancelText: "취소" }))) return;
-    await runBulkTask({ count: unpaid.length, label: "오더", verb: "지급 처리", task: (progress) => { let k = 0; return Promise.all(unpaid.map(r => pay(r._id, "지급완료").finally(() => progress(++k)))); } });
+    const fund = await askPayFund(); if (!fund) return;
+    if (!(await kpConfirm(`${rows[0]?.이름 || "이 기사"}의 미지급 ${unpaid.length}건(기사운임 ${unpaidSum.toLocaleString()}원)을 지급완료 처리하시겠습니까?\n${payConfirmText(unpaid, selectedPayDate || todayStr9(), fund)}`, { title: "지급완료", okText: "지급완료", cancelText: "취소" }))) return;
+    await runBulkTask({ count: unpaid.length, label: "오더", verb: "지급 처리", task: (progress) => { let k = 0; return Promise.all(unpaid.map(r => pay(r._id, "지급완료", fund.fundId).finally(() => progress(++k)))); } });
     alert(`${unpaid.length}건을 지급완료 처리했습니다.`);
   };
 
@@ -52334,10 +52380,12 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                         <button data-pay-toggle onClick={async () => {
                           // 💳 2026-11-11 화면 가운데 확인 창 — Enter · [네] = 바로 적용, Esc · [취소] = 닫기
                           const who = `${r.이름 || "기사"}${r.차량번호 ? ` (${r.차량번호})` : ""}`;
+                          const fund = isDone ? { fundId: "" } : await askPayFund(); // 💸 2026-11-27 출금 통장(기본 통장이 없으면 고르기)
+                          if (!fund) return;
                           const ok = isDone
-                            ? await kpConfirm(`지급완료를 취소하시겠습니까?\n${who} · ${won(toInt(r.기사운임) - payGapOf(r))}원 → 미지급으로 돌립니다`, { title: "지급 취소", okText: "네", cancelText: "취소", danger: true })
-                            : await kpConfirm(`지급완료하시겠습니까?\n${who} · ${r.상차일 || ""} ${r.상차지명 || ""} → ${r.하차지명 || ""}\n기사운임 ${won(r.기사운임)}원 · 지급일 ${selectedPayDate || todayStr9()}`, { title: "지급완료", okText: "네", cancelText: "취소" });
-                          if (ok) pay(r._id, isDone ? "지급중" : "지급완료");
+                            ? await kpConfirm(`지급완료를 취소하시겠습니까?\n${who} · ${won(toInt(r.기사운임) - payGapOf(r) + paidVatOf(r))}원 → 미지급으로 돌립니다`, { title: "지급 취소", okText: "네", cancelText: "취소", danger: true })
+                            : await kpConfirm(`지급완료하시겠습니까?\n${who} · ${r.상차일 || ""} ${r.상차지명 || ""} → ${r.하차지명 || ""}\n${payConfirmText([r], selectedPayDate || todayStr9(), fund)}`, { title: "지급완료", okText: "네", cancelText: "취소" });
+                          if (ok) pay(r._id, isDone ? "지급중" : "지급완료", fund.fundId);
                         }}
                           className={`px-3 py-1 rounded-lg text-[11px] font-bold text-white transition ${isDone ? "bg-[#0F1A30] hover:bg-[#1B2B4B]" : "bg-[#2D4C82] hover:bg-[#1B2B4B]"}`}>
                           {isDone ? "✓ 지급완료" : "미지급"}

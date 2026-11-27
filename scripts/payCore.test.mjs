@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import {
   payLedgerPlan, settleGapPlan, payGapOf, paidTotalOf, basePaidOf, isPaidThenCanceled,
-  paidEditGuard, paidDeleteWarn, statementPayPatch, statementUnpayPatch,
+  paidEditGuard, paidDeleteWarn, statementPayPatch, statementUnpayPatch, payTransferOf,
 } from "../src/payCore.js";
 
 let n = 0;
@@ -133,6 +133,22 @@ t("삭제 경고", () => {
   assert.equal(paidDeleteWarn([{ 지급상태: "지급중" }, null]), "");
   const w = paidDeleteWarn([{ 지급상태: "지급완료", 기사운임: 10000, 지급액: 8000 }, { 지급상태: "지급완료", 기사운임: 5000 }]);
   assert.match(w, /2건\(13,000원\)/);
+});
+
+t("세금계산서 받는 기사: 장부 = 부가세 포함 이체액 · 공급가 · 부가세 따로 · 취소하면 0", () => {
+  const plan = payLedgerPlan({ _id: "v", 기사운임: 260000 }, { status: "지급완료", date: "2026-11-27", vatRate: 0.1 }, TODAY);
+  assert.equal(plan.patch.지급액, 260000, "지급액은 공급가(운임 변경 계산 그대로)");
+  assert.equal(plan.patch.지급부가세, 26000);
+  assert.deepEqual(plan.bumps, [{ date: "2026-11-27", amount: 286000, supply: 260000, vat: 26000, count: 1 }]);
+  const o = { _id: "v", 기사운임: 260000, ...plan.patch };
+  const back = payLedgerPlan(o, { status: "지급중" }, TODAY);
+  assert.deepEqual(back.bumps, [{ date: "2026-11-27", amount: -286000, supply: -260000, vat: -26000, count: -1 }]);
+  assert.equal(back.patch.지급부가세, null);
+  const g = settleGapPlan({ ...o, 기사운임: 275000 }, TODAY);
+  assert.equal(g.adjAmount, 15000); assert.equal(g.adjVat, 1500, "추가 지급도 부가세 포함");
+  assert.equal(payTransferOf({ 기사운임: 260000 }, true).total, 286000); assert.equal(payTransferOf({ 기사운임: 260000 }, false).total, 260000);
+  const plain = payLedgerPlan({ _id: "w", 기사운임: 100000 }, { status: "지급완료", date: "2026-11-27" }, TODAY);
+  assert.equal(plain.patch.지급부가세, null); assert.equal(plain.bumps[0].amount, 100000); assert.equal(plain.bumps[0].vat, 0);
 });
 
 console.log(`payCore: ${n}개 통과`);
