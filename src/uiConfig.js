@@ -684,7 +684,7 @@ function runJs() {
     doPlace(k, hosts, { sig: hp + "||end", make: () => { const n = document.createElement("span"); n.setAttribute("data-kp-ublk", k); n.setAttribute("data-kp-ufh", ""); n.setAttribute("data-kp-no-text", ""); n.style.cssText = "border:0;padding:0;margin:4px 0 0;background:none"; renderLite(hp, "#2D4C82", n); n.__kpSig = hp + "||end"; return n; } }, "end");
   }
   for (const [k, list] of placed) if (!live.has(k)) { for (const { node } of list) node.remove(); placed.delete(k); }
-  if (observer) observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  if (observer) observer.observe(document.body, obsOpts());
   lastRun = performance.now();
   uiStats.ms += lastRun - t0;
 }
@@ -707,11 +707,17 @@ function scheduleJs() {
   const wait = Math.max(0, 80 - (performance.now() - lastRun)); // 많아도 80ms에 한 번
   setTimeout(() => { rafId = requestAnimationFrame(() => { pending = false; runJs(); }); }, wait);
 }
+// ⚡ 2026-11-27 속도 — 글자 바뀜(characterData)은 "글자로 찾는 규칙"(tg.t)이 있을 때만 본다.
+//  예전엔 늘 봐서 HOME 시계 · 실시간 숫자 한 글자만 바뀌어도 80ms마다 화면 전체를 다시 훑었다(대기 중 CPU 약 5%).
+//  위치(선택자) · 순번 · 입력칸 규칙은 요소가 붙고 떨어지는 것(childList)만으로 충분하다
+let watchText = false;
+const obsOpts = () => ({ childList: true, subtree: true, characterData: watchText });
 function startObserver() {
   if (!document.body) return;
   if (!observer) observer = new MutationObserver(onMut);
   observer.disconnect();
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  watchText = jsRules.els.some(([, r]) => !!r.tg?.t) || jsRules.blocks.some(([, b]) => !!b.tg?.t);
+  observer.observe(document.body, obsOpts());
 }
 function stopObserver() { if (observer) observer.disconnect(); if (rafId) cancelAnimationFrame(rafId); pending = false; }
 
