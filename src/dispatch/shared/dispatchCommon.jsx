@@ -43,6 +43,7 @@ import { useFareRules, fareFormChange, FareTypeSelect, FareRuleHint } from "../.
 import { fareBreakdown } from "../../forkliftCore";
 import { fkNum, profitTotals, orderProfit } from "../../forklift";
 import { useCompanyFeatures } from "../../companyFeatures";
+import { visibleCols } from "../../invoiceForm";
 import { DISPATCH_TOAST_TYPES, dispatchAlertsOn } from "../../notifyAudience";
 import { useBetaOn, OUT_KEY } from "../../CallPay";
 import { ensureUploadToken } from "../../uploadTokenClient";
@@ -2894,6 +2895,55 @@ export function OrderMemoModal({ type, name, memo, popupShow, notice, onCancel, 
     </div>
   );
 }
+export const KP_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
+// 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
+// ⚡ 2026-11-13 거래명세서 미리보기 줄 — 한 달 수백 줄을 한꺼번에 그리면 정산관리를 열 때 2초 넘게 멈췄다
+//  화면에는 처음 80줄만 그리고 [나머지 펼치기]로 모두 본다. 인쇄 · PDF · 엑셀 · 메일 첨부는 화면(#invoiceArea)을 그대로 쓰므로
+//  내보내기 직전에 expandInvoicePreview()로 전부 펼친 뒤 진행한다(합계 줄은 언제나 전체 기준)
+export const INVOICE_PREVIEW_ROWS = 80;
+export let _invoiceExpand = null;
+export async function expandInvoicePreview() { if (_invoiceExpand) await _invoiceExpand(); }
+export const _invoiceFit = new Set();
+export async function captureInvoiceFull(fn) {
+  const undo = [..._invoiceFit].map((f) => f());
+  try { await new Promise((r) => requestAnimationFrame(() => r())); return await fn(); }
+  finally { undo.forEach((u) => u && u()); }
+}
+export function InvoicePreviewRows({ mapped, rows, onOpen, docTd, docNum, DOC, won, form }) {
+  // 🧾 2026-11-16 거래처 양식(form) — 고른 칸만 · 고른 순서로, 세액 칸은 끌 수 있다
+  const cols = visibleCols(form);
+  const tax = form?.tax !== false;
+  const span = 1 + cols.length + (tax ? 3 : 1);
+  const [full, setFull] = React.useState(false);
+  const key = mapped.length ? `${mapped.length}|${mapped[0]?.idx}|${mapped[0]?.상차일}|${mapped[mapped.length - 1]?.상차일}` : "";
+  React.useEffect(() => { setFull(false); }, [key]);
+  const fullRef = React.useRef(full); fullRef.current = full;
+  React.useEffect(() => {
+    _invoiceExpand = () => new Promise((res) => { if (fullRef.current || mapped.length <= INVOICE_PREVIEW_ROWS) return res(); setFull(true); requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(res, 30))); });
+    return () => { _invoiceExpand = null; };
+  }, [mapped.length]);
+  const list = full ? mapped : mapped.slice(0, INVOICE_PREVIEW_ROWS);
+  return (
+    <>
+      {list.map((m, i) => (
+        <tr key={m.idx} className="cursor-pointer hover:bg-[#F4F6FA]" onClick={() => onOpen(rows[i])} title="클릭하여 상세보기">
+          <td style={{ ...docTd, color: DOC.mute, fontFamily: DOC.mono }}>{m.idx}</td>
+          {cols.map((c) => <td key={c.k} style={c.mono ? { ...docTd, fontFamily: DOC.mono, whiteSpace: "nowrap" } : c.small ? { ...docTd, fontSize: 10.5, whiteSpace: "nowrap" /* ⭐ 2026-11-17 (3차) 차량번호는 한 줄(경기82자 / 9732 처럼 끊기지 않게) */ } : docTd}>{m[c.k]}</td>)}
+          <td style={{ ...docNum, fontWeight: 700 }}>{won(m.공급가액)}</td>
+          {tax && <td style={{ ...docNum, color: DOC.sub }}>{won(m.세액)}</td>}
+          {tax && <td style={{ ...docNum, fontWeight: 900 }}>{won(m.공급가액 + m.세액)}</td>}
+        </tr>
+      ))}
+      {!full && mapped.length > INVOICE_PREVIEW_ROWS && (
+        <tr data-html2canvas-ignore="true">
+          <td colSpan={span} style={{ ...docTd, padding: "10px 6px" }}>
+            <button type="button" onClick={() => setFull(true)} style={{ height: 34, padding: "0 16px", borderRadius: 9, border: "1px solid #C9D5EA", background: "#fff", color: "#1B2B4B", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>나머지 {(mapped.length - INVOICE_PREVIEW_ROWS).toLocaleString()}줄 펼치기 (전체 {mapped.length.toLocaleString()}줄 · 합계는 전체 기준)</button>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
 
 // ⭐ 선택삭제 확인(2026-10-27 리디자인) — 실시간배차현황·배차현황·미배차현황 공용. 한 줄 요약 목록 + 합계, 남색 계열만
 export function KpDeleteConfirm({ rows = [], note = "삭제 후에도 되돌리기로 복구할 수 있습니다", onCancel, onConfirm }) {
@@ -3061,6 +3111,15 @@ export const orderSortValue = (r, key, i) => {
     case "혼적": return r.혼적 ? "혼적" : "";
     default: return r[key];
   }
+};
+
+/* -------------------------------------------------
+   Firestore 실시간 동기화 훅
+--------------------------------------------------*/
+export const COLL = {
+  dispatch: "orders",
+  drivers: "drivers",
+  clients: "clients",
 };
 
 /* -------------------------------------------------
@@ -3672,6 +3731,44 @@ export function CustomAlert({ message, onClose }) {
     </div>
   );
 }
+// ===================== DispatchApp.jsx (PART 1/8) — END =====================
+
+
+// ===================== FloatingCalculator =====================
+// 사용자가 제공한 "톤수별 차량 규격표" 원본(구분/적재함 길이/폭 참고/실무상 명칭)을
+// 차량제원 팝업의 "카고 차량 제원표"에 그대로 표시하기 위한 원본 그대로의 데이터.
+// LOAD_VEHICLES(계산기용, cm 단위로 환산)와 별개로 이 표는 원본 문구(범위 표기 등)를
+// 그대로 보여주는 용도라 값을 가공하지 않는다.
+// l(적재함 길이)·w(폭)는 cm, maxKg는 kg — LOAD_VEHICLES와 동일한 값을 그대로 들고 있어
+// "최대 적재 중량/최대 적재 파렛"을 표에서 자동 계산할 수 있게 한다(calcPalletFit 참고).
+// 관리자가 더블클릭으로 수정하면 이 값들이 override로 대체된다(specOverrides).
+export const CARGO_VEHICLE_SPEC_TABLE = [
+  { ton: "1톤",    category: "일반",        bedLength: "2.7~2.85m",   widthRef: "약 1.6m",       name: "1톤",                     l: 278,  w: 160, maxKg: 1100  },
+  { ton: "",        category: "장축",        bedLength: "3.0~3.1m",    widthRef: "약 1.6m",       name: "1톤 장축",               l: 305,  w: 160, maxKg: 1150  },
+  { ton: "1.4톤",  category: "일반",        bedLength: "2.9~3.1m",    widthRef: "약 1.6~1.7m",   name: "1.4톤",                   l: 300,  w: 165, maxKg: 1550  },
+  { ton: "",        category: "장축",        bedLength: "3.4m 전후",   widthRef: "약 1.7m",       name: "1.4톤 장축",             l: 340,  w: 170, maxKg: 1600  },
+  { ton: "2.5톤",  category: "일반",        bedLength: "4.2~4.3m",    widthRef: "약 1.8m",       name: "2.5톤",                   l: 425,  w: 180, maxKg: 2750  },
+  { ton: "3.5톤",  category: "일반",        bedLength: "4.5~4.9m",    widthRef: "약 2.05m",      name: "3.5톤",                   l: 470,  w: 205, maxKg: 3850  },
+  { ton: "",        category: "장축/초장축", bedLength: "5.0~5.5m 전후", widthRef: "약 2.05~2.3m", name: "3.5톤 장축",           l: 525,  w: 218, maxKg: 4000  },
+  { ton: "",        category: "와이드/광폭", bedLength: "5.2~6.2m",    widthRef: "2.3m 전후",     name: "3.5톤 와이드",           l: 570,  w: 230, maxKg: 4000  },
+  { ton: "5톤",    category: "일반",        bedLength: "6.2~6.3m",    widthRef: "2.15~2.3m",     name: "5톤",                     l: 625,  w: 223, maxKg: 5500  },
+  { ton: "",        category: "장축/플러스", bedLength: "6.7~7.3m",    widthRef: "약 2.3m",       name: "5톤 플러스",             l: 700,  w: 230, maxKg: 5800  },
+  { ton: "",        category: "축차/플러스축", bedLength: "7.3~8.5m",  widthRef: "약 2.3~2.4m",   name: "5톤 축",                 l: 790,  w: 235, maxKg: 7500  },
+  { ton: "",        category: "초장축/특장", bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "5톤/5.5톤/8.5톤 증톤 등", l: 960,  w: 240, maxKg: 8500  },
+  { ton: "8톤",    category: "일반/장축",   bedLength: "7.3~8m 전후", widthRef: "약 2.35m",      name: "8톤",                     l: 765,  w: 235, maxKg: 8800  },
+  { ton: "",        category: "장축/특장",   bedLength: "8~9m대",      widthRef: "약 2.4m",       name: "8톤 특장",               l: 850,  w: 240, maxKg: 9200  },
+  { ton: "9.5톤",  category: "일반/장축",   bedLength: "8~9.5m 전후", widthRef: "약 2.35~2.4m",  name: "9.5톤",                   l: 875,  w: 238, maxKg: 10500 },
+  { ton: "11톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "11톤",                    l: 900,  w: 235, maxKg: 12000 },
+  { ton: "",        category: "장축",        bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "11톤 장축",              l: 960,  w: 240, maxKg: 12700 },
+  { ton: "",        category: "초장축/후축", bedLength: "10.2m 전후", widthRef: "2.4m 전후",     name: "11톤 후축",              l: 1020, w: 240, maxKg: 14500 },
+  { ton: "14톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "14톤",                    l: 900,  w: 235, maxKg: 15400 },
+  { ton: "",        category: "장축/후축",   bedLength: "9.6~10.2m",  widthRef: "약 2.4m",       name: "14톤 후축",              l: 990,  w: 240, maxKg: 18200 },
+  { ton: "18톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "18톤",                    l: 1010, w: 240, maxKg: 19800 },
+  { ton: "22톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "22톤",                    l: 1010, w: 240, maxKg: 24200 },
+  { ton: "25톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "25톤",                    l: 1010, w: 240, maxKg: 27500 },
+  { ton: "추레라", category: "표준",        bedLength: "12m",         widthRef: "약 2.4m",       name: "24/25톤 추레라",         l: 1200, w: 240, maxKg: 27500 },
+  { ton: "",        category: "특장",        bedLength: "12m 이상/별도", widthRef: "차종별",      name: "저상·평판 등",           l: 1200, w: 240, maxKg: 32000 },
+];
 
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
 // 역할 이름(ROLE_LABELS)은 customRoles.js에서 가져온다(PC·모바일 공용)
@@ -6907,6 +7004,9 @@ export function AddressCell({ text = "", max = 5, valueClassName = "", popupTitl
     </div>
   );
 }
+
+// ⭐ 2026-11-02 점검 — 사업자등록증·직인 base64가 한 문서(transportApplications, 한도 1MiB)에 함께 저장되므로 저장 전에 이미지를 줄임(직인은 투명 배경 유지)
+export const COMPANY_DOC_B64_LIMIT = 900000;
 export function shrinkImageForDoc(file, { max = 1600, quality = 0.8, keepAlpha = false } = {}) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
