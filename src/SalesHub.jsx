@@ -9,7 +9,8 @@
 //  계산은 src/salesCore.js, 자료는 src/salesData.js
 import React from "react";
 import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
-import { addDoc, collection, deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { coDocKey } from "./coKey"; // 🤝 2026-11-27 수주 → 운송팀 거래처관리(clients) 문서 이름
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { db } from "./firebase";
 import KpSubNav from "./KpSubNav";
@@ -21,7 +22,7 @@ import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 �
 const PAmt = ({ v, children }) => <span style={{ color: profitColor(v) }}>{children}</span>;
 const PRate = ({ v, children }) => <span style={{ color: profitRateColor(v) }}>{children}</span>;
 import CustomDatePicker from "./CustomDatePicker";
-import { kpConfirm, kpAlert } from "./kpDialog";
+import { kpConfirm, kpAlert, kpPrompt } from "./kpDialog";
 import { useSalesBoard, useSalesMe, targetOf } from "./salesData";
 const TeamReport = React.lazy(() => import("./TeamReport")); // 📑 2026-11-15 영업팀 실적 보고서(매출관리와 같은 화면)
 import { useExecMode } from "./execUi"; // 👑 2026-11-17 임원 화면(대표 · 임원 메뉴에서 열 때만 남색 · 골드 보고판)
@@ -172,6 +173,26 @@ function Overview({ B, who, onTab }) {
 }
 
 // ═════════════════════════ 영업 기회(파이프라인) ═════════════════════════
+// 🤝 2026-11-27 수주 → 운송팀 거래처관리 연결 — 같은 거래처인지 이름으로 찾기(띄어쓰기 · (주) · 주식회사 무시)
+//  이미 있으면 그 거래처 이름 그대로 거래처 담당에 연결(배차팀 오더의 거래처명과 글자가 같아야 실적이 잡힌다)
+const clientKey = (v) => String(v || "").replace(/\(주\)|㈜|주식회사|\s+/g, "").toLowerCase();
+const findClientByName = (list, name) => { const k = clientKey(name); return k ? (list || []).find((c) => clientKey(c.거래처명) === k) || null : null; };
+async function linkWonClient(company, lead) {
+  let list = [];
+  try { list = (await getDocs(query(collection(db, "clients"), where("companyName", "==", company)))).docs.map((d) => ({ id: d.id, ...d.data() })); }
+  catch (e) { return { name: lead.name, note: "거래처관리를 확인하지 못해 연결하지 않았어요" }; }
+  const hit = findClientByName(list, lead.name);
+  if (hit) return { name: String(hit.거래처명 || lead.name).trim(), clientId: hit.id, note: `운송팀 거래처관리의 「${hit.거래처명}」과 연결했어요` };
+  const ok = await kpConfirm(`운송팀 거래처관리에 「${lead.name}」이(가) 아직 없어요.\n새 거래처로 만들까요?\n\n· 담당자 ${lead.contact || "-"} · 연락처 ${lead.phone || "-"}를 채워 둬요.\n· 만들어 두면 배차팀이 오더 등록 때 바로 고를 수 있고, 같은 이름이라 실적이 자동으로 잡혀요.`, { title: "거래처관리에 등록", okText: "만들기", cancelText: "나중에" });
+  if (!ok) return { name: lead.name, note: "" };
+  const addr = await kpPrompt("거래처 주소를 적어 주세요(모르면 비워 두세요)", "", { title: "거래처 주소", placeholder: "예: 경기 평택시 포승읍 …" });
+  if (addr == null) return { name: lead.name, note: "" };
+  const id = coDocKey(company, lead.name);
+  try {
+    await setDoc(doc(db, "clients", id), { id, 거래처명: lead.name, 담당자: lead.contact || "", 연락처: lead.phone || "", 주소: String(addr).trim(), 등급: "일반", 메모: [lead.route && `노선 ${lead.route}`, lead.vehicle && `차종 ${lead.vehicle}`, "영업 수주로 등록"].filter(Boolean).join(" · "), 영업담당: lead.ownerName || "", companyName: company, createdAt: Date.now(), createdBy: "영업관리 수주" }, { merge: true });
+    return { name: lead.name, clientId: id, note: `운송팀 거래처관리에 「${lead.name}」을(를) 만들었어요` };
+  } catch (e) { return { name: lead.name, note: `거래처를 만들지 못했어요(${e?.message || e})` }; }
+}
 const blankLead = (who) => ({ name: "", contact: "", phone: "", stage: "lead", monthlyRevenue: "", monthlyOrders: "", marginRate: "10", prob: "", route: "", vehicle: "", nextDate: "", nextAction: "", rival: "", memo: "", lostReason: "", ownerUid: who.uid, ownerName: who.name });
 function Pipeline({ B, who, company, isViewer }) {
   const narrow = useNarrow(900);
@@ -191,12 +212,14 @@ function Pipeline({ B, who, company, isViewer }) {
     if (!cName(f.name)) { kpAlert("화주(회사) 이름을 입력해 주세요."); return; }
     setBusy(true);
     try {
-      const data = { companyName: company, name: cName(f.name), contact: f.contact || "", phone: f.phone || "", stage: f.stage, monthlyRevenue: toInt(f.monthlyRevenue), monthlyOrders: toInt(f.monthlyOrders), marginRate: Number(f.marginRate) || 0, prob: f.prob === "" || f.prob == null ? "" : Number(f.prob) || 0, route: f.route || "", vehicle: f.vehicle || "", nextDate: f.nextDate || "", nextAction: f.nextAction || "", rival: f.rival || "", memo: f.memo || "", lostReason: f.lostReason || "", ownerUid: f.ownerUid || who.uid, ownerName: f.ownerName || who.name, touchedAt: today, wonAt: f.stage === "won" ? (f.wonAt || today) : "", updatedAt: serverTimestamp() };
+      const data = { companyName: company, name: cName(f.name), ...(f.clientId ? { clientId: f.clientId, clientName: cName(f.clientName) } : {}), contact: f.contact || "", phone: f.phone || "", stage: f.stage, monthlyRevenue: toInt(f.monthlyRevenue), monthlyOrders: toInt(f.monthlyOrders), marginRate: Number(f.marginRate) || 0, prob: f.prob === "" || f.prob == null ? "" : Number(f.prob) || 0, route: f.route || "", vehicle: f.vehicle || "", nextDate: f.nextDate || "", nextAction: f.nextAction || "", rival: f.rival || "", memo: f.memo || "", lostReason: f.lostReason || "", ownerUid: f.ownerUid || who.uid, ownerName: f.ownerName || who.name, touchedAt: today, wonAt: f.stage === "won" ? (f.wonAt || today) : "", updatedAt: serverTimestamp() };
       if (f.id) await updateDoc(doc(db, "salesLeads", f.id), data);
       else await addDoc(collection(db, "salesLeads"), { ...data, createdDay: today, createdAt: serverTimestamp() });
       // 수주 → 거래처 담당 자동 등록(이미 담당이 있는 거래처는 그대로)
-      if (data.stage === "won" && !B.accounts.some((a) => cName(a.client) === data.name)) {
-        await addDoc(collection(db, "salesAccounts"), { companyName: company, client: data.name, uid: data.ownerUid, name: data.ownerName, since: data.wonAt, memo: "영업 기회 수주", createdAt: serverTimestamp() });
+      //  🤝 2026-11-27 운송팀 거래처관리와 연결된 이름(f.clientName)이 있으면 그 이름으로
+      const acctName = cName(f.clientName) || data.name;
+      if (data.stage === "won" && !B.accounts.some((a) => cName(a.client) === acctName)) {
+        await addDoc(collection(db, "salesAccounts"), { companyName: company, client: acctName, uid: data.ownerUid, name: data.ownerName, since: data.wonAt, memo: "영업 기회 수주", ...(f.clientId ? { clientId: f.clientId } : {}), createdAt: serverTimestamp() });
       }
       setEdit(null);
     } catch (e) { kpAlert(`저장하지 못했습니다.\n${e?.message || e}`); } finally { setBusy(false); }
@@ -208,7 +231,10 @@ function Pipeline({ B, who, company, isViewer }) {
   };
   const win = async () => {
     if (!(await kpConfirm(`「${edit.name}」을(를) 수주 처리할까요?\n\n· 거래처 담당에 ${edit.ownerName || who.name}님 거래처로 등록됩니다(수주일 오늘).\n· 배차팀이 같은 이름의 거래처로 오더를 넣으면 실적·인센티브가 자동으로 잡힙니다.`, { title: "수주 처리", okText: "수주 처리" }))) return;
-    save({ stage: "won", wonAt: today });
+    // 🤝 2026-11-27 운송팀 거래처관리에 같은 거래처가 있으면 연결, 없으면 만들지 묻기
+    const link = cName(edit.name) ? await linkWonClient(company, { ...edit, name: cName(edit.name) }) : { name: edit.name, note: "" };
+    await save({ stage: "won", wonAt: today, ...(link.clientId ? { clientId: link.clientId, clientName: link.name } : {}) });
+    if (link.note) kpAlert(link.note);
   };
   const remove = async () => {
     if (!(await kpConfirm("이 영업 기회를 삭제할까요?", { title: "삭제", okText: "삭제", danger: true }))) return;
