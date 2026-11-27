@@ -631,7 +631,7 @@ export function OrderPanelClock() {
   const p2 = (n) => String(n).padStart(2, "0");
   return <>{`${p2(clock.getHours())}:${p2(clock.getMinutes())}:${p2(clock.getSeconds())}`}</>;
 }
-export function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate, footer, variant }) {
+export function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate, footer, variant, quick = false }) {
   const pad2 = (n) => String(n).padStart(2, "0");
   const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
   const parseValidDate = (s) => {
@@ -757,8 +757,26 @@ export function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDro
           <button type="button" onClick={() => setTarget("pickup")} aria-pressed={target === "pickup"} className={pill(target === "pickup")}>상차일{pickupDate ? ` · ${pickupDate.slice(5).replace("-", "/")}` : " 선택"}</button>
           <button type="button" onClick={() => setTarget("drop")} aria-pressed={target === "drop"} className={pill(target === "drop")}>하차일{dropDate ? ` · ${dropDate.slice(5).replace("-", "/")}` : " 선택"}</button>
         </div>
-        <div className="flex items-center justify-between mt-2 text-[11px] font-bold text-[#8A97AD]">
-          <button type="button" onClick={goToday} className="text-[#1B2B4B] font-extrabold hover:underline">오늘로 이동</button>
+        {/* 🎨 2026-11-27 시안 K — 빠른 선택: 고른 쪽(상차일 · 하차일)에 날짜를 바로 넣는다
+             이번주 = 이번 주 금요일 · 다음주 = 다음 주 월요일 · 1개월 = 한 달 뒤 같은 날 */}
+        {quick && (() => {
+          const t = new Date(); const base = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+          const at = (fn) => { const d = new Date(base); fn(d); return fmt(d.getFullYear(), d.getMonth(), d.getDate()); };
+          const Q = [["오늘", (d) => d], ["내일", (d) => d.setDate(d.getDate() + 1)], ["모레", (d) => d.setDate(d.getDate() + 2)],
+            ["이번주", (d) => d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7))], ["다음주", (d) => d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7))], ["1개월", (d) => d.setMonth(d.getMonth() + 1)]];
+          const cur = target === "pickup" ? pickupDate : dropDate;
+          return (
+            <div className="mt-3 pt-3 border-t border-[#EEF2F8]">
+              <div className="text-[12px] font-extrabold text-[#2A3852] mb-2">빠른 선택 <span className="font-bold text-[#5E6B82]">· {target === "pickup" ? "상차일" : "하차일"}에 넣어요</span></div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {Q.map(([l, fn]) => { const v = at(fn); const on = v === cur; return (
+                  <button key={l} type="button" onClick={() => { handlePick(v); const d = new Date(v); setViewDate(new Date(d.getFullYear(), d.getMonth(), 1)); }} title={v}
+                    className={`h-8 rounded-[9px] border text-[12px] font-extrabold transition ${on ? "border-[#1B2B4B] bg-[#EEF3FB] text-[#1B2B4B]" : "border-[#DCE2EC] text-[#3A4A66] hover:border-[#1B2B4B]"}`}>{l}</button>); })}
+              </div>
+            </div>);
+        })()}
+        <div className="flex items-center justify-between mt-2 text-[11px] font-bold text-[#5E6B82]">
+          {quick ? <span /> : <button type="button" onClick={goToday} className="text-[#1B2B4B] font-extrabold hover:underline">오늘로 이동</button>}
           <span className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]" />상차</span>
             <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border-2 border-[#1B2B4B]" />하차</span>
@@ -2913,22 +2931,19 @@ export function shouldShowDriverMemoAlert(d) {
 // 색으로 확실히 바꾸고, 거기에 더해 우측 상단에 작은 점 배지를 얹어 천천히
 // 깜빡이게 한다 — 색 변화 하나만으로는(특히 아이콘이 작을 때) 구분이 잘 안
 // 되던 문제라, "색이 다르다" + "깜빡이는 배지가 있다" 두 가지 신호를 같이 준다.
-export function OrderMemoIconButton({ onClick, title = "오더메모", hasMemo = false, size = 24 }) {
+// 🎨 2026-11-27 사용자 요청 — 상 · 하차지 오더메모 아이콘을 고급스럽게: 작은 알약(메모) · 등록돼 있으면 남색으로 채우고 금색 점
+export function OrderMemoIconButton({ onClick, title = "오더메모", hasMemo = false }) {
   return (
-    <button type="button" tabIndex={-1} onClick={onClick}
-      className={`relative inline-flex transition ${hasMemo ? "text-amber-600 hover:opacity-80" : "text-[#1B2B4B] hover:opacity-70"}`}
+    <button type="button" tabIndex={-1} onClick={onClick} data-kp="order-memo-btn" aria-pressed={hasMemo}
+      className={`relative inline-flex items-center gap-1 h-[22px] pl-1.5 pr-2 rounded-[7px] border text-[11px] font-extrabold leading-none transition shrink-0 ${hasMemo
+        ? "bg-[#1B2B4B] border-[#1B2B4B] text-white shadow-[0_2px_6px_rgba(15,26,48,0.25)] hover:bg-[#0F1A30]"
+        : "bg-white border-[#D5DEEB] text-[#2D4C82] hover:border-[#1B2B4B] hover:bg-[#F3F6FB]"}`}
       title={hasMemo ? `${title} (등록됨)` : title}>
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-        <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
-        <path d="M9 13h6" /><path d="M9 17h6" />
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z" /><path d="M13.5 6.5l3 3" />
       </svg>
-      {hasMemo && (
-        <span
-          className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-500 border-2 border-white"
-          style={{ animation: "cancelSlowBlink 1.6s ease-in-out infinite" }}
-        />
-      )}
+      메모
+      {hasMemo && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#E8B04B] ring-2 ring-white" />}
     </button>
   );
 }

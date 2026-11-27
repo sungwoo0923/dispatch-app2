@@ -50,14 +50,17 @@ export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport
   ];
   const initial = String(name || "").trim().slice(0, 1) || "나";
   return (
+    <div className="relative flex items-center gap-1">
+      {profile && !children && <button type="button" tabIndex={-1} aria-label="알림 내역" title="알림 내역" data-kp="hdr-bell"
+        onClick={() => { setOpen(false); openBell(); }}
+        className="relative w-8 h-8 grid place-items-center rounded-lg text-white/85 hover:bg-white/[0.12] hover:text-white">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{I.bell}</svg>
+        {total > 0 && <span className="absolute -top-0.5 -right-1"><Badge n={total} /></span>}
+      </button>}
     <div ref={box} className="relative" onMouseEnter={enter} onMouseLeave={leave} data-kp="user-hub">
       {profile && !children ? (
         <button type="button" onClick={() => setOpen(true)} aria-haspopup="menu" aria-expanded={open} title="내 메뉴: 사내메일함 · 알림 · 내 정보 · 화면 설정 · 로그아웃" data-kp="hdr-company"
           className="h-9 inline-flex items-center gap-2.5 pl-1.5 pr-2.5 rounded-xl hover:bg-white/[0.08] transition whitespace-nowrap">
-          <span className="relative w-8 h-8 grid place-items-center text-white/85">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{I.bell}</svg>
-            {total > 0 && <span className="absolute -top-0.5 -right-1"><Badge n={total} /></span>}
-          </span>
           <span className="w-8 h-8 rounded-full grid place-items-center text-[12.5px] font-black text-white shrink-0" style={{ background: "linear-gradient(135deg,#2D4C82,#4B6CB7)", boxShadow: "0 0 0 2px rgba(255,255,255,.18)" }}>{initial}</span>
           <span className="text-left leading-tight min-w-0">
             <span className="block text-[13px] font-black text-white truncate max-w-[180px]">{profile.person || name || "내 계정"}</span>
@@ -90,6 +93,7 @@ export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport
               </button>))}
           </div>
         </div>)}
+    </div>
     </div>
   );
 }

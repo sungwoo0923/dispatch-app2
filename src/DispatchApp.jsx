@@ -5073,6 +5073,9 @@ return (
         )}
 
         {menu === "배차관리" && (
+          // 🎨 2026-11-27 시안 K — 오더등록 왼쪽에도 배차 메뉴(오더등록 · 실시간배차현황 · 배차현황)
+          <KpSubNav code="ORDER" title="배차" icon="truck" active="배차관리" onSelect={(k) => { if (k !== "배차관리") handleMenuClick(k); }}
+            items={[{ key: "배차관리", label: "오더등록", en: "NEW ORDER", icon: "truck" }, { key: "실시간배차현황", label: "실시간배차현황", en: "LIVE", icon: "bell" }, { key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "sheet" }].filter((it) => menuShown(it.key) !== "hidden")}>
           <DispatchManagement
           key={`dm-${viewResetKey}`}
           menu={menu}
@@ -5103,6 +5106,7 @@ return (
             markEditRequestSeen={markEditRequestSeen}
             approvedShippers={approvedShippers}
           />
+          </KpSubNav>
         )}
 
         {menu === BRIEF_MENU && canBriefing && (

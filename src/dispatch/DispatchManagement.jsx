@@ -310,7 +310,7 @@ const AREA_OPTIONS = [
   { code: "01", name: "서울" },
 ];
 
-const FuelSlideWidget = React.memo(function FuelSlideWidget() {
+const FuelSlideWidget = React.memo(function FuelSlideWidget({ card = false } = {}) {
   const [prices, setPrices] = React.useState([]);
   const [page, setPage] = React.useState(0);
   const [area, setArea] = React.useState("01");
@@ -404,6 +404,32 @@ if (!prices.length || !items.length) {
   return <div className="h-10 flex items-center px-5 text-sm text-gray-500">유가 정보 없음</div>;
 }
 
+// ⛽ 2026-11-27 시안 K — 오더등록 위 오른쪽 '전국 유가' 카드(경유 · 휘발유 · 고급휘발유를 한 번에 · 같은 자료)
+if (card) {
+  const cols = [diesel, gasoline, premium].filter(Boolean);
+  const nm = (it) => (it.PRODNM.includes("고급") ? "고급휘발유" : it.PRODNM.includes("경유") ? "경유" : "휘발유");
+  return (
+    <div data-kp="fuel-card" className="w-[470px] max-w-full rounded-[18px] overflow-hidden text-white shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(125deg,#0B1428,#0F1A30 45%,#1B2B4B 80%,#2D4C82)" }}>
+      <div className="flex items-center gap-2.5 px-4 pt-3 pb-2.5">
+        <span className="w-[30px] h-[30px] rounded-[9px] bg-white/[0.12] grid place-items-center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 21V5a2 2 0 012-2h6a2 2 0 012 2v16M3 21h12M14 9h2a2 2 0 012 2v5a1.5 1.5 0 003 0V8l-3-3M6 8h6" /></svg>
+        </span>
+        <div><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">FUEL PRICE · TODAY</div><div className="text-[14px] font-black leading-tight">전국 유가</div></div>
+        <CustomSelect value={area} onChange={(e) => setArea(e.target.value)} className="ml-auto bg-white text-[#0F1A30] text-[12.5px] font-black rounded-[9px] px-3 py-1.5">
+          {AREA_OPTIONS.map(a => (<option key={a.code} value={a.code}>{a.name}</option>))}
+        </CustomSelect>
+      </div>
+      <div className="grid border-t border-white/10" style={{ gridTemplateColumns: cols.map((_, i) => (i === 0 ? "1.15fr" : "1fr")).join(" ") }}>
+        {cols.map((it, i) => { const d = Number(it.DIFF || 0); const up = d > 0; return (
+          <div key={i} className={`px-4 pt-2.5 pb-3 border-l border-white/[0.08] ${i === 0 ? "bg-white/[0.07]" : ""}`} style={{ fontVariantNumeric: "tabular-nums" }}>
+            <div className={`text-[11.5px] font-extrabold ${i === 0 ? "text-white" : "text-[#9AA9C3]"}`}>{nm(it)}</div>
+            <div className={`${i === 0 ? "text-[20px]" : "text-[17px]"} font-black tracking-tight mt-0.5`}>{Number(it.PRICE).toLocaleString()}<small className="text-[11px] font-bold text-[#9AA9C3] ml-1">원/L</small></div>
+            <div className={`text-[11.5px] font-extrabold mt-0.5 ${up ? "text-[#FFB4B4]" : "text-[#9EE6B8]"}`}>{up ? "▲" : "▼"} {Math.abs(d)}원 <span className="text-[#7F8BA0] font-bold">전일</span></div>
+          </div>); })}
+      </div>
+    </div>
+  );
+}
 return (
     <div className="flex items-center gap-4 bg-[#1B2B4B] text-white px-4 py-1.5 rounded-lg shadow text-sm overflow-hidden border border-[#243a60]">
 
@@ -625,8 +651,11 @@ function DmDot({ on, alert = false }) {
   const skinOn = skinAllowed ? ofSkin : readSkin(false);
   const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); saveSkin(n); return n; });
   const layOn = LAYOUT_SKINS.has(skinOn);
+  const kOn = skinOn === "k"; // 🎨 2026-11-27 시안 K(사용자 확정)
+  const [kDatesEl, setKDatesEl] = React.useState(null); // 날짜 줄을 K 격자 안으로(포털)
+  const [kOptEl, setKOptEl] = React.useState(null); // 운행 옵션 묶음을 K 카드 안으로(포털)
   const ofHiddenKey = [...ofs.hidden].sort().join("|");
-  const ofGrid = React.useMemo(() => routeGrid(ofHiddenKey ? ofHiddenKey.split("|") : [], skinOn === "deck" ? "deck" : "route"), [ofHiddenKey, skinOn]); // 숨긴 칸 자리는 옆 칸이 채운다
+  const ofGrid = React.useMemo(() => routeGrid(ofHiddenKey ? ofHiddenKey.split("|") : [], skinOn === "deck" || skinOn === "k" ? skinOn : "route"), [ofHiddenKey, skinOn]); // 숨긴 칸 자리는 옆 칸이 채운다
   const dmLookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
 
       // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 등록폼 전역에서 재사용하므로 최상위에서
@@ -650,7 +679,11 @@ function DmDot({ on, alert = false }) {
           // 순서: 날짜 줄(상차일 · 시간 · 하차일 · 시간) → 입력칸(청구 사업자 … 전달사항). 빠른 등록 · 도구 버튼 줄은 빼고
           const ok = (el) => !el.disabled && el.tabIndex !== -1 && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
           const zone = (sel) => [...root.querySelectorAll(sel)].filter((el) => el.matches(SEL) && ok(el));
-          const list = [...zone(".kp-date-row *"), ...zone('[data-of]:not([data-of="head"]) *')];
+          // 🎨 시안 K — 화면 순서대로(청구 사업자 · 거래처 → 상차 · 하차 일시 → 상차지 … → 메모)
+          const K_TAB = ["cli", "pdate", "ptime", "ddate", "dtime", "pn", "pa", "pm", "pc", "dn", "da", "dm", "dc", "cargo", "vk", "ton", "lm", "um", "pay", "way", "closeym", "ss", "plate", "dname", "dphone", "fsale", "fdrv", "ffee", "memo"];
+          const list = root.closest(".of-lay-k")
+            ? K_TAB.flatMap((t) => zone(`[data-of="${t}"] *`))
+            : [...zone(".kp-date-row *"), ...zone('[data-of]:not([data-of="head"]) *')];
           if (!list.length) return;
           const cur = e.target;
           let i = list.indexOf(cur);
@@ -5730,6 +5763,19 @@ React.useEffect(() => {
     const renderForm = () => (
       <>
         {/* ⭐ 2026-11-13 한 줄 빠른 등록 — 지난 노선을 찾아 오더복사와 같은 방식으로 채운다 */}
+        {/* 🎨 2026-11-27 시안 K — 위쪽 띠: [일반배차 | 정기배차] · 빠른 등록 · 오른쪽 전국 유가 카드 */}
+        <div className={kOn ? "of-k-banner" : ""}>
+        {kOn && (
+          <div className="of-k-tabs" role="tablist" aria-label="배차 종류">
+            <button type="button" role="tab" aria-selected="true" className="of-k-tab on">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="7" width="12" height="9" rx="1.5" /><path d="M14 10h4l3 3v3h-7" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></svg>일반배차
+            </button>
+            <button type="button" role="tab" aria-selected="false" className="of-k-tab" onClick={() => setRecurringOpen(true)} title="지금 입력한 오더를 요일 · 시각마다 자동 등록(정기오더)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>정기배차
+            </button>
+          </div>
+        )}
+        <div className={kOn ? "of-k-quick" : ""}>
         {!isViewer && <QuickOrderLine rows={dispatchData} userCompany={userCompany} canMoney={canMoney} onApply={(row, o) => {
           if (row) applyCopy(row, { quick: true });
           // 🚚 2026-11-15 화물내용 · 상차→하차 이름도 한 줄에서(지난 노선이 없어도 적은 값은 채운다)
@@ -5737,6 +5783,10 @@ React.useEffect(() => {
           if (o.kind) setVehicleQuery(o.kind);
           if (o.fare > 0 && canMoney) onChange("청구운임", String(o.fare));
         }} />}
+        </div>
+        {kOn && <FuelSlideWidget card />}
+        </div>
+        {!kOn && (<>
         <div className="flex items-center gap-4 mb-3">
 
   <h2 className="text-lg font-bold"><EditableText id="popup.title.배차관리 폼" defaultText="오더등록" /></h2>
@@ -5746,6 +5796,7 @@ React.useEffect(() => {
   <FuelSlideWidget />
 
 </div>
+        </>)}
    
    {/* ================== 통합 입력 카드 ================== */}
 <div className="kp-order-card bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
@@ -5754,6 +5805,13 @@ React.useEffect(() => {
 <div className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#EDF1F7] bg-[linear-gradient(180deg,#FBFCFE,#F5F7FB)]" style={{ minHeight: "56px" }}>
   {/* 좌측 버튼 그룹 */}
   <div className="flex items-center gap-2 flex-wrap">
+    {kOn && (
+      <span className="inline-flex items-center gap-2 mr-1 text-[14.5px] font-black text-[#0F1A30] tracking-[-0.02em]">
+        <span className="w-[26px] h-[26px] rounded-[8px] grid place-items-center shadow-[0_3px_8px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(135deg,#0F1A30,#2D4C82)" }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>
+        </span>배차 옵션
+      </span>
+    )}
 
      {/* 오더복사 */}
     <button
@@ -5795,7 +5853,7 @@ React.useEffect(() => {
 
     {/* ⭐ 정기오더 — 지금 입력한 오더를 요일·시각마다 자동 등록 */}
     <button
-      type="button"
+      type="button" data-k-hide
       onClick={() => setRecurringOpen(true)}
       className={DM_BTN_SECONDARY}
     >
@@ -5807,8 +5865,15 @@ React.useEffect(() => {
       className={DM_BTN_SECONDARY}>
       <DmIcon name="lookup" />담당자·차량 조회
     </button>
+    {/* 🎨 2026-11-27 시안 K — 배차 옵션 카드에 다중등록 · 매뉴얼 */}
+    {kOn && (
+      <button type="button" onClick={openMultiRegister} className={DM_BTN_SECONDARY} title="거래처(상차지)는 고정하고, 하차지·화물 등이 서로 다른 오더 여러 건을 한 번에 등록">
+        <DmIcon name="layers" />다중등록
+      </button>
+    )}
+    {kOn && <ManualButton menu="배차관리" label="매뉴얼" />}
     {/* 🧩 2026-11-26 입력칸 설정 — 필요 없는 칸 숨기기(회사 전체 · 내 설정) */}
-    <button type="button" onClick={() => setOfOpen(true)} title="필요 없는 입력칸을 숨겨요(회사 전체 · 내 설정)" data-testid="order-fields-btn"
+    <button type="button" data-k-hide onClick={() => setOfOpen(true)} title="필요 없는 입력칸을 숨겨요(회사 전체 · 내 설정)" data-testid="order-fields-btn"
       className={DM_BTN_SECONDARY}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M7 9h4M7 13h6M7 17h3M15.5 9.5l1.2 1.2 2.3-2.4" /></svg>
       입력칸 설정{ofs.hidden.size > 0 && <span className="ml-0.5 text-[11px] font-black px-1.5 rounded-full bg-[#1B2B4B] text-white">{ofs.hidden.size}개 숨김</span>}
@@ -5828,8 +5893,23 @@ React.useEffect(() => {
   </div>
 
   {/* 구분선 */}
-  <span className="hidden md:block w-px h-6 bg-[#DCE3EE]" />
+  <span data-k-hide className="hidden md:block w-px h-6 bg-[#DCE3EE]" />
+{(() => { const __optGroup = (
   <div className="flex items-center gap-2 flex-wrap">
+  {/* 🎨 2026-11-27 시안 K — 운행 옵션 카드: [독차 | 혼적 | 왕복 | 긴급](독차가 기본 · 나머지는 켜고 끔) · 왕복이면 회전 */}
+  {kOn && (
+    <div className="flex items-center gap-2 w-full">
+      <span className="text-[12px] font-extrabold text-[#2A3852] w-[60px] shrink-0">운행 옵션</span>
+      <div role="group" aria-label="운행 옵션" className="flex p-[3px] rounded-[10px] bg-[#F1F4F9] border border-[#E3E8F0]">
+        {[["독차", !form.혼적 && form.운행유형 !== "왕복" && !form.긴급, () => setForm((p) => ({ ...p, 혼적: false, 독차: true, 긴급: false, ...(p.운행유형 === "왕복" ? { 운행유형: "편도", 회전수: 1, 회전방식: "묶기" } : {}) }))],
+          ["혼적", !!form.혼적, () => setForm((p) => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 }))],
+          ["왕복", form.운행유형 === "왕복", () => setForm((p) => p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1, 회전방식: "묶기" } : { ...p, 운행유형: "왕복" })],
+          ["긴급", !!form.긴급, () => onChange("긴급", !form.긴급)]].map(([l, on, fn]) => (
+          <button key={l} type="button" onClick={fn} aria-pressed={on}
+            className={`h-8 px-3.5 rounded-[8px] text-[12.5px] font-extrabold transition ${on ? "bg-[#1B2B4B] text-white shadow-[0_2px_6px_rgba(15,26,48,0.25)]" : "text-[#5E6B82] hover:text-[#0F1A30]"}`}>{l}</button>))}
+      </div>
+    </div>
+  )}
 
   {/* ⭐ 2026-11-09 독차 버튼 제거 — 혼적·왕복이 아니면 자동으로 독차 */}
 
@@ -5939,6 +6019,7 @@ React.useEffect(() => {
     </div>
   )}
 </div>
+); return kOn && kOptEl ? createPortal(__optGroup, kOptEl) : __optGroup; })()}
 {showFareRouteMap && (
   <RouteMapModal
     pickupAddr={form.상차지주소}
@@ -5950,13 +6031,14 @@ React.useEffect(() => {
     onClose={() => setShowFareRouteMap(false)}
   />
 )}
-  <div className="w-px h-7 bg-gray-200" />
+  <div data-k-hide className="w-px h-7 bg-gray-200" />
   {/* 날짜 시간 ▼ */}
+{(() => { const __dateRow = (
 <div className="kp-date-row flex flex-nowrap items-center gap-x-2.5 text-sm min-w-0">{/* 🧭 2026-11-27 사용자 요청 — 상·하차 교체까지 한 줄(줄바꿈 금지) */}
 
 {/* ================= 상차 ================= */}
-  <label className="text-[13px] font-bold text-[#1B2B4B]">상차</label>
-  {(() => {
+  <label data-k-hide className="text-[13px] font-bold text-[#1B2B4B]">상차</label>
+  <div data-of="pdate" className="contents-none">{(() => {
     const formWorkDates = _parseWorkDates(form.근무일자목록);
     const isMultiWork = !!form.복수근무일 && formWorkDates.length > 1;
     return (
@@ -5976,9 +6058,9 @@ React.useEffect(() => {
         displayOverride={isMultiWork ? `${form.상차일 || ""} 외 ${formWorkDates.length - 1}일` : undefined}
       />
     );
-  })()}
+  })()}</div>
   {/* 상차 시간 + 이전/이후 */}
-  <div className="flex items-center gap-1">
+  <div data-of="ptime" className="flex items-center gap-1">
     <TimeAmPmPicker
       value={form.상차시간 || ""}
       onChange={v => { onChange("상차시간", v); setShowAmPmError(false); }}
@@ -6015,7 +6097,7 @@ React.useEffect(() => {
   </div>
 
   {/* 상차: 당일 / 내일 */}
-  <div className="flex gap-1 ml-2">
+  <div data-of="pq" className="flex gap-1 ml-2">
     <button type="button"
       className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
       onClick={() => onChange("상차일", _todayStr())}>
@@ -6043,8 +6125,8 @@ React.useEffect(() => {
 </div>
 
  {/* ================= 하차 ================= */}
-  <label className="text-[13px] font-bold text-[#1B2B4B] ml-4">하차</label>
-  <div className="relative">
+  <label data-k-hide className="text-[13px] font-bold text-[#1B2B4B] ml-4">하차</label>
+  <div data-of="ddate" className="relative">
     <CustomDatePicker
       value={form.하차일 || ""}
       showIcon
@@ -6080,7 +6162,7 @@ React.useEffect(() => {
   </div>
 
   {/* 하차 시간 + 이전/이후 */}
-  <div className="flex items-center gap-1">
+  <div data-of="dtime" className="flex items-center gap-1">
     <TimeAmPmPicker
       value={form.하차시간 || ""}
       onChange={v => { onChange("하차시간", v); setShowAmPmError(false); }}
@@ -6117,7 +6199,7 @@ React.useEffect(() => {
   </div>
 
  {/* 하차: 당일 / 내일 */}
-  <div className="flex gap-1 ml-2">
+  <div data-of="dq" className="flex gap-1 ml-2">
     <button type="button"
       className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
       onClick={() => onChange("하차일", _todayStr())}>
@@ -6146,8 +6228,9 @@ React.useEffect(() => {
 </div>
 
 {/* 🗓 2026-11-27 오더등록 1안 — [상·하차 교체] 버튼 하나에 거리 · 시간 · 도착 예상 · 경로보기(주소 둘 다 있을 때) */}
-<SwapRouteButton form={form} onSwap={swapPickupDrop} onMap={() => setShowFareRouteMap(true)} />
+<div data-of="sw" className="contents-none"><SwapRouteButton form={form} onSwap={swapPickupDrop} onMap={() => setShowFareRouteMap(true)} /></div>
   </div>
+); return kOn && kDatesEl ? createPortal(__dateRow, kDatesEl) : __dateRow; })()}
 </div>
 {/* ===== 오더 자동파싱 영역 ===== */}
 {showOrderParser && (
@@ -6908,6 +6991,21 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
 
 {/* 🎨 구성형 디자인 시안 — 카드 바탕 · 묶음 제목 · 가운데 경로(입력칸은 그대로) */}
 {layOn && <LayoutDecor skin={skinOn} form={form} mid={ofGrid.mid} onSwap={swapPickupDrop} onMap={() => setShowFareRouteMap(true)} />}
+{kOn && <>
+  <div className="of-k-dates" ref={setKDatesEl} />
+  <div data-of="opt" ref={setKOptEl} />
+  <div data-of="cal">
+    <div className="of-k-calcard">
+      <div className="of-k-head" style={{ marginBottom: 10 }}>
+        <span className="of-k-ci"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /></svg></span><b>상·하차일 선택</b>
+      </div>
+      <OrderCalendarPanel variant="deck" quick
+        pickupDate={form.상차일 || ""} dropDate={form.하차일 || ""}
+        onPickupChange={(v) => onChange("상차일", v)} onDropChange={(v) => onChange("하차일", v)}
+        companyName={userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY} />
+    </div>
+  </div>
+</>}
 
 {/* 청구 사업자(여러 사업자일 때만) + 거래처 + 신규등록
     ⭐ 2026-11-03 청구 사업자를 맨 앞 칸으로 — 거래처 칸(2칸) 안을 나눠 쓰므로 뒤 칸들이 밀리지 않는다 */}
@@ -9354,7 +9452,7 @@ className={`
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
   {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
-  <div data-kp-order-form="1" className="basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]" style={{ flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
+  <div data-kp-order-form="1" className={kOn ? "w-full" : "basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]"} style={{ flexGrow: kOn ? 1 : 0, flexShrink: 0, minWidth: 0, overflow: kOn ? "visible" : "hidden" }}>
     {renderForm()}
   </div>
 
@@ -9363,7 +9461,7 @@ className={`
       (CustomDatePicker)에서 처리한다. 사용자 피드백: "오른쪽 패널에 있는
       달력말고 오더정보에 있는 달력에 다중선택 버튼을 넣어달라" — 그래서
       이 패널은 원래대로 단일 상/하차일 선택 전용으로 유지한다. */}
-  {skinOn === "route" ? (
+  {kOn ? null /* 🎨 시안 K — 달력은 입력창 안(오른쪽 칸) */ : skinOn === "route" ? (
     // 🎨 A 루트 보드 — 달력 위에 운임 요약(보기만 · 입력은 왼쪽 칸)
     <div className="flex flex-col gap-3" style={{ flex: "1 1 0%", minWidth: 0 }}>
       <FareSummary form={form} hint={areaFareHint ? `이 구간 최근 운임 ${areaFareHint.min.toLocaleString()} ~ ${areaFareHint.max.toLocaleString()}원 (${areaFareHint.count}건)` : distanceFareEstimate ? `거리 기준 추정 ${distanceFareEstimate.min.toLocaleString()} ~ ${distanceFareEstimate.max.toLocaleString()}원` : ""} />
