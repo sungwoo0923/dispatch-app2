@@ -91,7 +91,7 @@ export function calcIncentive({ orders = [], accounts = [], policy: pIn, uid, ym
     if (!a || a.uid !== uid) return;
     if (a.since && d < a.since) return; // 수주일 전 오더는 내 실적이 아니다
     const sale = toInt(r.청구운임), buy = orderCost(r); // ⭐ 2026-11-17 기사운임 + 지게차·외부 지급
-    const g = by.get(c) || { client: c, since: a.since || "", n: 0, sale: 0, buy: 0, base: 0, exN: 0, exSale: 0, open: 0 };
+    const g = by.get(c) || { client: c, since: a.since || "", existing: a.existing === true, n: 0, sale: 0, buy: 0, base: 0, exN: 0, exSale: 0, open: 0 };
     g.n += 1; g.sale += sale; g.buy += buy;
     if (!orderSettled(r)) g.open += 1;
     const margin = sale > 0 ? ((sale - buy) / sale) * 100 : 0;
@@ -110,7 +110,7 @@ export function calcIncentive({ orders = [], accounts = [], policy: pIn, uid, ym
   let gross = 0;
   rows.forEach((x) => {
     const age = x.since ? monthGap(x.since.slice(0, 7), ym) : 999;
-    x.isNew = !!x.since && age >= 0 && age < policy.newMonths;
+    x.isNew = !!x.since && !x.existing && age >= 0 && age < policy.newMonths; // 🔒 2026-11-27 담당 지정 전부터 거래하던 거래처(existing)는 신규 가산 없음
     x.isMature = policy.matureMonths > 0 && !!x.since && age >= policy.matureMonths;
     const factor = x.isMature ? policy.matureFactor / 100 : 1;
     x.rate = effRate * factor + (x.isNew ? policy.newBonus : 0);
@@ -159,7 +159,7 @@ export function clientHealth({ orders = [], accounts = [], clients = [], today =
     const a = acc.get(g.client) || null;
     const idle = g.last ? dayGap(g.last, today) : null;
     const change = g.p30 > 0 ? ((g.r30 - g.p30) / g.p30) * 100 : (g.r30 > 0 ? 100 : 0);
-    const isNew = !!a?.since && monthGap(a.since.slice(0, 7), ym) >= 0 && monthGap(a.since.slice(0, 7), ym) < policy.newMonths;
+    const isNew = !!a?.since && a.existing !== true && monthGap(a.since.slice(0, 7), ym) >= 0 && monthGap(a.since.slice(0, 7), ym) < policy.newMonths;
     let state = "steady";
     if (!g.last) state = "none";
     else if (idle > 30) state = "sleep";
@@ -214,4 +214,8 @@ export function simulateWin({ current, policy: pIn, monthlyRevenue = 0, marginRa
 // 영업 담당자인지(부서 이름에 영업 · 영업 역할) / 영업 관리 권한(규정·목표·거래처 배정·인센티브 확정)
 export const SALES_ROLES = ["salesMgr", "salesStaff"];
 export const isSalesUser = (u) => !!u && (SALES_ROLES.includes(u.role) || /영업/.test(String(u.team || "")));
+// 🔒 2026-11-27 자기 결재 막기 — 본인 인센티브 확정 · 지급 완료는 다른 영업 관리 권한자(임원 · 운송/통합관리자 · 마스터)가 한다(firestore.rules salesIncentives 와 같음)
+export const canConfirmIncentive = (who, uid) => !!who?.canManage && !!uid && uid !== who.uid;
+// 담당 지정 전부터 거래하던 거래처인가 — 첫 오더일이 수주일보다 앞이면 기존 거래처(신규 가산 없음)
+export const isExistingClient = (firstOrderDay, since) => !!firstOrderDay && !!since && firstOrderDay < since;
 export const canManageSales = ({ role = "", isMaster = false, exec = false } = {}) => ["salesMgr", "admin", "allMgr", "totalMaster"].includes(role) || isMaster === true || exec === true;
