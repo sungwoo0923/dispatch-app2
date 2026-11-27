@@ -8,6 +8,7 @@
 // ⭐ 2026-11-17 예외: 수익 식은 functions/profitCore.mjs(가져오는 것 없음)를 forkliftCore.js 로 가져온다 — 배차표 수수료와 같은 식
 //  매입(buy) = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출이익 = 매출 − 매입 = orderProfit
 import { orderProfit, orderCost, fkNum } from "./forkliftCore.js";
+import { isSettledIn } from "../functions/arCore.mjs"; // 💰 2026-11-27 정산완료 = 청구월 키(정산 홈 · 미수금관리와 같게)
 import { salesMonthOf } from "./salesRule.js"; // 🗓 2026-11-25 실적 달 = 청구월(마감월 → 없으면 상차일 달) — 매출관리 · 미수금과 같은 달(가져오는 것: arCore · profitCore 뿐)
 
 export const toInt = (v) => fkNum(v); // 🛠 2026-11-25 매출이익(orderProfit)과 같은 금액 읽기(소수점 반올림)
@@ -74,7 +75,9 @@ export function accountMap(accounts = []) {
 }
 // 수금 여부 — 정산관리 › 거래처정산에서 그 달을 「정산완료」로 처리하면 오더마다 정산상태["YYYY-MM"]이 찍힌다.
 //  한 거래처의 그 달 오더가 모두 정산완료면 수금된 것으로 본다(거래처정산 화면과 같은 기준)
-export const orderSettled = (r) => { if (r?.수금 != null) return !!r.수금; const d = orderDate(r); return (r?.정산상태 && typeof r.정산상태 === "object" ? r.정산상태[d.slice(0, 7)] : "") === "정산완료"; };
+//  💰 2026-11-27 정산 홈 · 미수금관리와 같은 기준 — 청구월(마감월) 정산완료(isSettledIn · 예전 상차월 키도 봄) 또는 입금 확인 [입금완료].
+//   예전엔 상차월 키만 봐서 우리마트처럼 정산 쪽은 '입금 완료'인데 영업관리는 '미수'로 나왔다
+export const orderSettled = (r) => { if (r?.수금 != null) return !!r.수금; return String(r?.입금상태 || "") === "입금완료" || isSettledIn(r, salesMonthOf(r)); };
 
 // ─── 한 사람 · 한 달 인센티브 ───
 //  orders: 배차완료 오더(청구운임·기사운임·거래처명·상차일·정산상태) / accounts: 거래처 담당 / target: 그 달 매출 목표

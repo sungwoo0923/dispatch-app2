@@ -32,6 +32,7 @@ export const ORDER_FIELDS = [
   { key: "하차방법", label: "하차방법", group: "방법 · 지급" },
   { key: "지급방식", label: "지급방식", group: "방법 · 지급" },
   { key: "배차방식", label: "배차방식", group: "방법 · 지급" },
+  { key: "마감월", label: "마감월(이월 오더)", group: "방법 · 지급" }, // 🗓 2026-11-27 10/31 상차 · 11월 마감처럼 청구 달을 오더에서 바로 정한다
   { key: "메모", label: "메모 · 기사 전달사항", group: "메모" },
 ];
 export const LOCKED = new Set(ORDER_FIELDS.filter((f) => f.locked).map((f) => f.key));

@@ -1,7 +1,8 @@
 // ======================= src/settleCore.js =======================
 // 🧭 2026-11-14 정산 홈 계산(순수 함수) — 화면은 src/SettleHome.jsx · 테스트 scripts/settleHome.test.mjs
 //  명세서 단계 순서는 src/SettleDesk.jsx STMT_STAGES 와 같다(미작성 → 작성 → 발송 → 확인 → 계산서요청 → 계산서발행 → 마감)
-import { paidOut } from "./forkliftCore.js"; // ⭐ 2026-11-17 회사가 따로 지급(지게차·외부 특수운임) — functions/profitCore.mjs
+import { paidOut, orderProfit } from "./forkliftCore.js";
+import { isSalesOrder, fixedSalesRows } from "../functions/salesRule.mjs"; // 📏 2026-11-27 정산 홈 매출도 한 규칙(배차완료 + 고정거래처) // ⭐ 2026-11-17 회사가 따로 지급(지게차·외부 특수운임) — functions/profitCore.mjs
 const STAGE_ORDER = ["미작성", "작성", "발송", "확인", "계산서요청", "계산서발행", "마감"];
 export const stageIdx = (k) => Math.max(0, STAGE_ORDER.indexOf(k));
 export const n = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
@@ -34,7 +35,10 @@ export function fleetPlateSet(drivers, isFleet) {
   (drivers || []).forEach((d) => { if (!isFleet(d?.등급)) return; const p = plateKeyOf(d?.차량번호 || d?.carNo); if (p && p !== "-") set.add(p); });
   return set;
 }
-export function summarizeSettle(orders, ym, stageOf = () => "미작성", today = kstToday(), { fleetPlates = null } = {}) {
+//  📏 2026-11-27 opts.fixedRows: 고정거래처 매출(fixedClients) — 위 표의 매출 · 매입 · 매출이익은 운송 HOME · 경리 HOME · 매출관리와 같은 규칙
+//   (배차완료 오더 + 고정거래처 · 청구월). 시뮬레이션에서 정산 홈만 배차중(운행 전) 오더까지 매출로 잡아 552만 vs 441만이었다.
+//   진행 중(배차중 · 미배차) 오더 청구액은 pendingSale 로 따로 알려 준다. 거래처별 정산 목록(clients)은 예전처럼 청구할 오더 전부.
+export function summarizeSettle(orders, ym, stageOf = () => "미작성", today = kstToday(), { fleetPlates = null, fixedRows = null } = {}) {
   const rows = (orders || []).filter((o) => !isCancel(o) && o?.source !== "transport_transmit");
   const mine = rows.filter((o) => monthOf(o) === ym);
   const billable = mine.filter((o) => n(o.청구운임) > 0 && String(o.거래처명 || "").trim());
@@ -68,8 +72,11 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
     { key: "close", label: "마감", go: "거래처정산", total, left: needClose.length, unit: "곳", hint: "미마감", amount: sumOf(needClose) },
   ];
   // ⭐ 2026-11-17 매입 = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출이익 = 청구 − 기사 − 지게차 등(배차표 수수료와 같은 식)
-  const drv = withDrv.reduce((a, o) => a + n(o.기사운임), 0), paid = mine.reduce((a, o) => a + paidOut(o), 0);
-  const sale = sumOf(clients), buy = drv + paid;
+  const salesMine = [...mine.filter(isSalesOrder), ...fixedSalesRows(fixedRows).filter((r) => monthOf(r) === ym)];
+  const drv = salesMine.reduce((a, o) => a + n(o.기사운임), 0), paid = salesMine.reduce((a, o) => a + paidOut(o), 0);
+  const sale = salesMine.reduce((a, o) => a + n(o.청구운임), 0);
+  const profitAll = salesMine.reduce((a, o) => a + orderProfit(o), 0), buy = sale - profitAll;
+  const pendingSale = billable.filter((o) => !isSalesOrder(o)).reduce((a, o) => a + n(o.청구운임), 0);
   // 미수 경과(전체 기간) — 입금 안 됐고 그 달을 마감하지 않은 청구
   const aging = new Map();
   rows.forEach((o) => {
@@ -81,7 +88,7 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
     if (age <= 30) x.d30 += s; else if (age <= 60) x.d60 += s; else if (age <= 90) x.d90 += s; else x.over += s;
     x.total += s; aging.set(c, x);
   });
-  return { ym, steps, clients, sale, buy, drv, paid, profit: sale - buy, aging: [...aging.values()].sort((a, b) => (b.over + b.d90) - (a.over + a.d90) || b.total - a.total) };
+  return { ym, steps, clients, sale, buy, drv, paid, profit: sale - buy, pendingSale, aging: [...aging.values()].sort((a, b) => (b.over + b.d90) - (a.over + a.d90) || b.total - a.total) };
 }
 // 거래처 원장 — 달마다 청구 · 입금 · 잔액(오래된 달부터 잔액을 쌓는다)
 export function clientLedger(orders, client, stageOf = () => "미작성") {

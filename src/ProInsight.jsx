@@ -12,7 +12,8 @@ import { orderProfit, orderCost, paidOut, fkNum } from "./forkliftCore"; // ⭐ 
 import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
-import { isSalesOrder, salesMonthOf, salesBillDateOf } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙
+import { isSalesOrder, salesMonthOf, salesBillDateOf, fixedSalesRows } from "./salesRule";
+import { useCompanyRows } from "./companyColStore"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙
 const n = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 const won = (v) => `${Math.round(v || 0).toLocaleString()}`;
 const pct = (a, b) => (b ? (a / b) * 100 : 0);
@@ -36,7 +37,8 @@ function rangeOf(key) {
   const first = (y, m) => new Date(y, m, 1);
   const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   let s, e, ps, pe;
-  if (key === "this") { s = first(now.getFullYear(), now.getMonth()); e = now; ps = first(now.getFullYear(), now.getMonth() - 1); pe = new Date(ps.getFullYear(), ps.getMonth(), now.getDate()); }
+  // 📏 2026-11-27 "이번 달" = 1일 ~ 말일 청구분(홈 · 경영 브리핑 · 매출관리 · 정산 홈과 같은 범위) — 전월 비교는 예전처럼 같은 날까지
+  if (key === "this") { s = first(now.getFullYear(), now.getMonth()); e = new Date(now.getFullYear(), now.getMonth() + 1, 0); ps = first(now.getFullYear(), now.getMonth() - 1); pe = new Date(ps.getFullYear(), ps.getMonth(), now.getDate()); }
   else if (key === "last") { s = first(now.getFullYear(), now.getMonth() - 1); e = new Date(now.getFullYear(), now.getMonth(), 0); ps = first(now.getFullYear(), now.getMonth() - 2); pe = new Date(now.getFullYear(), now.getMonth() - 1, 0); }
   else { s = first(now.getFullYear(), now.getMonth() - 2); e = now; ps = first(now.getFullYear(), now.getMonth() - 5); pe = new Date(now.getFullYear(), now.getMonth() - 2, 0); }
   return { s: fmt(s), e: fmt(e), ps: fmt(ps), pe: fmt(pe) };
@@ -61,7 +63,9 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
   const [reportClient, setReportClient] = React.useState("");
   const [reportMonth, setReportMonth] = React.useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return ymKey(d); });
   const { s, e, ps, pe } = rangeOf(period);
-  const valid = React.useMemo(() => data.filter(isInsightRow), [data]);
+  // 📏 2026-11-27 고정거래처 매출도 넣는다(매출관리 · 홈과 같은 매출 규칙 salesRule)
+  const fixedLive = useCompanyRows("fixedClients", companyName);
+  const valid = React.useMemo(() => [...data.filter(isInsightRow), ...fixedSalesRows(fixedLive).filter((r) => n(r.청구운임) > 0 && r.상차일)], [data, fixedLive]);
   // 🗓 2026-11-25 기간 매출은 청구일(청구월 안 날짜 · 이월 오더는 청구월 1일 — salesRule.salesBillDateOf) 기준
   const cur = valid.filter((r) => { const b = salesBillDateOf(r); return b >= s && b <= e; });
   const prev = valid.filter((r) => { const b = salesBillDateOf(r); return b >= ps && b <= pe; });

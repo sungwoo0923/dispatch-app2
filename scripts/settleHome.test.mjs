@@ -20,7 +20,11 @@ assert.deepEqual([step("payout").left, step("payout").amount], [3, 270000]);
   const F = summarizeSettle(more, "2026-11", stageFinder(stmts), "2026-11-14", { fleetPlates: fp });
   const p = F.steps.find((s) => s.key === "payout");
   assert.deepEqual([p.total, p.left, p.amount], [4, 3, 270000], "지입차 · 배차중 오더는 기사 지급에서 빠진다");
-  assert.equal(F.drv, 350000 + 500000 + 30000, "매입(기사운임 합)에는 그대로 들어간다");
+  // 📏 2026-11-27 매입 · 매출은 매출 규칙(배차완료 + 고정거래처)만 — 배차중 오더 기사운임은 빠진다(운송 HOME · 매출관리와 같게)
+  assert.equal(F.drv, 350000 + 500000, "매입(기사운임 합) = 배차완료 오더만");
+  assert.equal(F.pendingSale, 0, "청구운임 0 인 배차중 오더는 진행 중 청구에도 없다");
+  const G = summarizeSettle([...orders, o({ _id: "10", 배차상태: "배차중", 청구운임: "70000" })], "2026-11", stageFinder(stmts), "2026-11-14", { fixedRows: [{ 날짜: "2026-11-03", 거래처명: "고정", 청구운임: "100000", 기사운임: "60000" }, { 날짜: "2026-10-03", 거래처명: "고정", 청구운임: "5" }] });
+  assert.deepEqual([G.sale, G.pendingSale, G.profit], [450000 + 100000, 70000, 100000 + 40000], "고정거래처는 매출에 · 배차중은 진행 중 청구로");
 }
 const ag = Object.fromEntries(S.aging.map((a) => [a.client, a]));
 assert.equal(ag.가나상사.over, 300000); assert.equal(ag.가나상사.d30, 200000); assert.ok(!ag.마바 && !ag.다라물산);

@@ -18880,6 +18880,20 @@ className={`
   </div>
   )}
 
+  {/* 🗓 2026-11-27 마감월(이월 오더) — 시뮬레이션: 운송팀이 "10/31 상차 · 11월 마감"을 정할 곳이 없어 경리에서 10월 청구로 잡혔다.
+       비워 두면 예전처럼 상차일의 달(거래처 마감일이 있으면 그 기준). 정하면 명세서 · 미수금 · 매출 · 회계가 모두 이 달로 잡힌다(arCore.monthOf) */}
+  {ofShow("마감월") && (
+  <div data-of="closeym">
+    <label className={labelCls} title="상차한 달과 청구할 달이 다를 때만 고르세요. 비워 두면 상차일의 달로 청구돼요.">마감월 <span className="text-[11px] font-semibold text-gray-400">(이월일 때만)</span></label>
+    <div className="flex gap-1">
+      <input type="month" className={inputCls} value={String(form.마감월 || "").slice(0, 7)} onChange={(e) => onChange("마감월", e.target.value)} />
+      {(() => { const d = String(form.상차일 || ""); if (!/^\d{4}-\d{2}/.test(d)) return null; const [y, m] = d.slice(0, 7).split("-").map(Number); const nx = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`; return form.마감월
+        ? <button type="button" className="shrink-0 px-2 rounded-lg border border-gray-300 text-[12px] font-bold text-gray-600" onClick={() => onChange("마감월", "")}>지우기</button>
+        : <button type="button" className="shrink-0 px-2 rounded-lg border border-gray-300 text-[12px] font-bold text-gray-600 whitespace-nowrap" onClick={() => onChange("마감월", nx)}>익월({Number(nx.slice(5))}월)</button>; })()}
+    </div>
+  </div>
+  )}
+
   {ofShow("배차방식") && ( /* 🧩 입력칸 설정 */
   <div data-of="way">
     <label className={labelCls}><EditableText id="orderForm.label.배차방식" defaultText="배차방식" /><DropdownOptionsManageButton optKey="배차방식" label="배차방식" role={role} userCompany={userCompany} /></label>
@@ -31204,6 +31218,12 @@ value={copyTarget?.화물수량 || ""}
                     setEditTarget((p) => ({ ...p, 지급방식: e.target.value })))({ target: { value: __v } })} />
               </div>
 
+              {/* 🗓 2026-11-27 마감월(이월 오더) — 비우면 상차일의 달로 청구 */}
+              <div>
+                <label>마감월 <span className="text-[11px] text-gray-500">(이월일 때만)</span></label>
+                <input type="month" className="border p-2 rounded w-full" value={String(editTarget.마감월 || "").slice(0, 7)} onChange={(e) => setEditTarget((p) => ({ ...p, 마감월: e.target.value }))} />
+              </div>
+
               <div>
                 <label>배차방식</label>
                 <DispatchWayPicker scope={[editTarget?.거래처명, editTarget?.상차지명, editTarget?.하차지명]} placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
@@ -31357,6 +31377,7 @@ const ALLOWED_FIELDS = [
   "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
   "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", // 🏗 2026-11-09 지게차비용
   "지급방식", "배차방식", "콜구분", "콜플랫폼", // 💳 2026-11-12 IN/OUT도 같이 저장(예전엔 빠져서 수정 창에서 OUT을 골라도 IN으로 남았다)
+  "마감월", // 🗓 2026-11-27 이월 오더 마감월(오더 등록 · 수정에서 지정)
   "_owner", "_assignerSet", "배차확정자", // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기(patchDispatch가 처리)
   "메모",
   "메모중요도",
@@ -38006,6 +38027,12 @@ return (
                     setEditTarget((p) => ({ ...p, 지급방식: e.target.value })))({ target: { value: __v } })} />
               </div>
 
+              {/* 🗓 2026-11-27 마감월(이월 오더) — 비우면 상차일의 달로 청구 */}
+              <div>
+                <label>마감월 <span className="text-[11px] text-gray-500">(이월일 때만)</span></label>
+                <input type="month" className="border p-2 rounded w-full" value={String(editTarget.마감월 || "").slice(0, 7)} onChange={(e) => setEditTarget((p) => ({ ...p, 마감월: e.target.value }))} />
+              </div>
+
               <div>
                 <label>배차방식</label>
                 <DispatchWayPicker scope={[editTarget?.거래처명, editTarget?.상차지명, editTarget?.하차지명]} placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
@@ -38160,6 +38187,7 @@ return (
       "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
       "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", // 🏗 2026-11-09 지게차비용
       "지급방식", "배차방식", "콜구분", "콜플랫폼", // 💳 2026-11-12 IN/OUT도 같이 저장(예전엔 빠져서 수정 창에서 OUT을 골라도 IN으로 남았다)
+      "마감월", // 🗓 2026-11-27 이월 오더 마감월(오더 등록 · 수정에서 지정)
   "_owner", "_assignerSet", "배차확정자", // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기(patchDispatch가 처리)
       "메모",
       "메모중요도",
@@ -48621,7 +48649,9 @@ const handleBatchSettle = async (targetStatus) => {
       const aging = {}; const openList = []; const cells = {};
       rows.forEach(r => {
         const 청구VAT = Math.round((r.총청구금액 || 0) * 1.1);
-        const open = r.정산상태 === "미정산" || r.정산상태 === "일부입금";
+        // 💰 2026-11-27 이번 달(진행중)도 받을 돈 — 예전엔 이번 달에 계산서를 낸 거래처가 목록에 안 나와 이번 달 입금을 넣을 곳이 없었고,
+        //  미수금 합계가 경리 HOME · 경영 HOME · 회계(올해 청구 전체 − 받은 돈)보다 작았다
+        const open = r.정산상태 === "미정산" || r.정산상태 === "일부입금" || (r.정산상태 === "진행중" && r.잔액 > 0);
         const od = open ? arOverDays(r.yyyymm, rule) : null;
         cells[r.yyyymm] = { st: r.정산상태, amt: open ? r.잔액 : 청구VAT, over: od };
         if (!open) return;

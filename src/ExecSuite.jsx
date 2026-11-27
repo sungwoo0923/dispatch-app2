@@ -41,7 +41,7 @@ import { EX, EX_NUM, EX_FONT, GOLD_GRAD, GoldRule, ExecPage, ExecPanel, ExecKpis
 import { monthPipeline, laborByMonth, teamComposition, teamContribution, attendanceToday, briefSentences, TEAM_NONE } from "./execBriefingCore";
 import { liveRows, monthsBack } from "./execAnalyticsCore";
 import { staffRanking, monthSpans } from "./dailyReportCore";
-import { receivablesOf } from "./arAging";
+import { arSummaryOf } from "./arLive"; // 💰 2026-11-27 미수금 한 숫자
 import { useUserNameMap, orderStaffNameRaw, ORDER_MGR_FIXED } from "./detailGetters";
 import { useCompanyRows } from "./companyColStore";
 import { useArPaid } from "./arPaidLive"; // 🔗 2026-11-25 미수금 받은 돈 — 회계 · 정산 화면과 같은 식
@@ -360,10 +360,13 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const dayNo = Number(today.slice(8, 10));
   const dim = new Date(Date.UTC(Number(thisMonth.slice(0, 4)), Number(thisMonth.slice(5, 7)), 0)).getUTCDate();
   // 🗓 2026-11-25 달 · 연 합계: 매출 · 이익 = 청구일(bill · 청구월 기준), 건수 = 상차일(days)
-  const sumWhere = (fn) => { const b = Object.entries(bill).reduce((a, [d, v]) => (fn(d) ? [a[0] + v[0], a[1] + v[1]] : a), [0, 0]); const c = Object.entries(days).reduce((a, [d, v]) => (fn(d) ? a + v[2] : a), 0); return [b[0], b[1], c]; };
-  const [mSale, mProfit, mCnt] = sumWhere((d) => d.startsWith(thisMonth));
+  //  📏 2026-11-27 운송 HOME(HomeDeck)과 같은 범위 — 매출 · 이익은 이번 달 말일까지의 청구일, 건수는 오늘까지의 상차일
+  //   (예전엔 올해 누적에 12월 청구분이 들어가 운송 HOME보다 187만원 많았고, 건수에 내일 이후 상차 오더가 섞였다)
+  const sumWhere = (fn, cntFn = fn) => { const b = Object.entries(bill).reduce((a, [d, v]) => (fn(d) ? [a[0] + v[0], a[1] + v[1]] : a), [0, 0]); const c = Object.entries(days).reduce((a, [d, v]) => (cntFn(d) ? a + v[2] : a), 0); return [b[0], b[1], c]; };
+  const monthEndKey = `${thisMonth}-${String(dim).padStart(2, "0")}`;
+  const [mSale, mProfit, mCnt] = sumWhere((d) => d.startsWith(thisMonth), (d) => d.startsWith(thisMonth) && d <= today);
   const [pSale, pProfit] = sumWhere((d) => d.startsWith(prevMonth) && Number(d.slice(8, 10)) <= dayNo);
-  const [ySale, yProfit, yCnt] = sumWhere((d) => d.startsWith(year));
+  const [ySale, yProfit, yCnt] = sumWhere((d) => d.startsWith(year) && d <= monthEndKey, (d) => d.startsWith(year) && d <= today);
   const prevAvail = prevMonth.slice(0, 4) === year;
   const mMargin = mSale ? (mProfit / mSale) * 100 : null;
   const pMargin = pSale ? (pProfit / pSale) * 100 : null;
@@ -392,10 +395,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   // ── 미수금(회계관리 · 경영 분석과 같은 계산 — 올해 배차완료 + 고정거래처, 부가세 포함 − 수금 기록) ──
   const ar = React.useMemo(() => {
     if (!arPay || !yearLoaded) return null;
-    const list = receivablesOf({ orders: rows, fixedRows: demo ? [] : fixedLive || [], paid: arPay, today }).filter((x) => x.outstanding > 0);
-    const total = list.reduce((s, x) => s + x.outstanding, 0);
-    const over30 = list.reduce((s, x) => s + (x.aging?.b60 || 0) + (x.aging?.b90 || 0) + (x.aging?.over || 0), 0);
-    return { total, over30, clients: list.length };
+    // 💰 2026-11-27 경리 HOME · 정산 홈 · 미수금관리와 같은 함수(src/arLive.js arSummaryOf)
+    return arSummaryOf({ orders: rows, fixedRows: demo ? [] : fixedLive || [], paid: arPay, today });
   }, [arPay, yearLoaded, rows, fixedLive, demo, today]);
 
   // ── 결재 ──
@@ -425,7 +426,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const nameMap = useUserNameMap();
   const staffOf = React.useCallback((r) => { const n = orderStaffNameRaw(r, nameMap); return (n && n !== ORDER_MGR_FIXED ? n : "") || String(r?.배차확정자 || "").trim() || n || "미지정"; }, [nameMap]);
   const teamByName = React.useMemo(() => { const m = {}; staff.forEach((u) => { const n = String(personName(u) || u.name || "").trim(); if (n) m[n] = String(u.team || "").trim(); }); return m; }, [staff]);
-  const rank = React.useMemo(() => { const sp = monthSpans(today); return staffRanking(rows, sp.cur, sp.prev, staffOf, (n) => n === "최고관리자", true); /* 🗓 청구월 기준 */ }, [rows, today, staffOf]);
+  // 📏 2026-11-27 이번 달 = 1일 ~ 말일 청구분(이번 달 매출 타일 · 사업 흐름과 같은 범위). 예전엔 1일 ~ 오늘이라 '회사 전체'가 452만 vs 사업 흐름 499만으로 달랐다
+  const rank = React.useMemo(() => { const sp = monthSpans(today); const cur = [...sp.cur]; for (let d = addDay(today, 1); d.startsWith(thisMonth); d = addDay(d, 1)) cur.push(d); return staffRanking(rows, cur, sp.prev, staffOf, (n) => n === "최고관리자", true); /* 🗓 청구월 기준 */ }, [rows, today, thisMonth, staffOf]);
   const teamRows = React.useMemo(() => teamContribution(rank.list, (n) => teamByName[n] || ""), [rank, teamByName]);
 
   // ── 거래처 ──

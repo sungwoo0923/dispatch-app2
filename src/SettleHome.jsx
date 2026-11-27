@@ -14,6 +14,8 @@ import { MarginPct, profitColor } from "./marginPct"; // ⭐ 2026-11-17 매출�
 import BillingBoard from "./BillingBoard"; // 🧾 2026-11-17 청구 현황판(미청구 · 청구완료 · 입금완료)
 import { closeBoard } from "./closeFlow"; // ✅ 2026-11-16 2단계 마감 숫자
 import { n, won, short, kstYm, monthOf, stageFinder, summarizeSettle, clientLedger, fleetPlateSet, stmtDocFinder, stmtRowsNow, stmtDrift, stmtDriftText, stmtDriftHint } from "./settleCore";
+import { useCompanyRows } from "./companyColStore";
+import { useCompanyReceivables } from "./arLive"; // 💰 2026-11-27 미수금 한 숫자(회계 · 경리 HOME · 경영 HOME 과 같은 식)
 import { isFleetGrade } from "./fleetGradesCore"; // 🔗 2026-11-25 기사 지급 = 용차지급관리와 같은 오더(지입차 제외)
 export { summarizeSettle, clientLedger } from "./settleCore";
 
@@ -70,7 +72,13 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
   const months = React.useMemo(() => { const set = new Set([kstYm(0), kstYm(-1)]); (orders || []).forEach((o) => { const m = monthOf(o); if (/^\d{4}-\d{2}$/.test(m)) set.add(m); }); return [...set].sort().reverse().slice(0, 24); }, [orders]);
   const [ym, setYm] = React.useState(() => kstYm(0));
   const fleetPlates = React.useMemo(() => (Array.isArray(drivers) ? fleetPlateSet(drivers, isFleetGrade) : null), [drivers]);
-  const S = React.useMemo(() => summarizeSettle(orders, ym, stageOf, undefined, { fleetPlates }), [orders, ym, stageOf, fleetPlates]);
+  const fixedRows = useCompanyRows("fixedClients", company); // 📏 2026-11-27 고정거래처 매출 — 매출 · 매입 · 이익을 운송 HOME · 매출관리와 같게
+  const S = React.useMemo(() => summarizeSettle(orders, ym, stageOf, undefined, { fleetPlates, fixedRows }), [orders, ym, stageOf, fleetPlates, fixedRows]);
+  // 💰 2026-11-27 미수금(부가세 포함) — 회계관리 · 경리 HOME · 경영 HOME · 미수금관리와 같은 한 숫자.
+  //  예전엔 "명세서 마감 = 받은 것"으로 봐서 실제 입금 없이도 '입금 완료'가 되고, 미수 잔액이 다른 화면과 달랐다(3,473만 vs 1,450만)
+  const AR = useCompanyReceivables({ company, dispatchData: orders });
+  const arAging = React.useMemo(() => AR.list.map((x) => ({ client: x.client, d30: x.aging?.b30 || 0, d60: x.aging?.b60 || 0, d90: x.aging?.b90 || 0, over: x.aging?.over || 0, total: x.outstanding })), [AR.list]);
+  const arOpenOf = React.useMemo(() => { const m = new Map(); AR.list.forEach((x) => (x.open || []).forEach((o) => { const k = `${x.client}|${String(o.d).slice(0, 7)}`; m.set(k, (m.get(k) || 0) + o.amt); })); return m; }, [AR.list]);
   // ⚠ 2026-11-25 명세서 작성 뒤 금액이 바뀐 거래처(명세서에 남긴 공급가 ↔ 지금 오더 합계)
   const stmtOf = React.useMemo(() => stmtDocFinder(desk?.stmts), [desk?.stmts]);
   const prepaidDefault = desk?.config?.stmtIncludePrepaid === true;
@@ -87,10 +95,10 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
   const [client, setClient] = React.useState("");
   const [stepF, setStepF] = React.useState("");
   const [q, setQ] = React.useState("");
-  const comboOptions = React.useMemo(() => { const un = new Map(S.aging.map((a) => [a.client, a.total])); const names = new Set(); (orders || []).forEach((o) => { const c = String(o.거래처명 || "").trim(); if (c && n(o.청구운임) > 0) names.add(c); }); return [...names].map((name) => ({ name, unpaid: un.get(name) || 0 })).sort((a, b) => b.unpaid - a.unpaid || a.name.localeCompare(b.name, "ko")); }, [orders, S.aging]);
+  const comboOptions = React.useMemo(() => { const un = new Map(arAging.map((a) => [a.client, a.total])); const names = new Set(); (orders || []).forEach((o) => { const c = String(o.거래처명 || "").trim(); if (c && n(o.청구운임) > 0) names.add(c); }); return [...names].map((name) => ({ name, unpaid: un.get(name) || 0 })).sort((a, b) => b.unpaid - a.unpaid || a.name.localeCompare(b.name, "ko")); }, [orders, arAging]);
   const ledger = React.useMemo(() => (client ? clientLedger(orders, client, stageOf) : []), [orders, client, stageOf]);
   const [startOld, setStartOld] = React.useState(() => settleStartTab() === "거래처정산");
-  const agingTotal = S.aging.reduce((a, x) => ({ d30: a.d30 + x.d30, d60: a.d60 + x.d60, d90: a.d90 + x.d90, over: a.over + x.over, total: a.total + x.total }), { d30: 0, d60: 0, d90: 0, over: 0, total: 0 });
+  const agingTotal = arAging.reduce((a, x) => ({ d30: a.d30 + x.d30, d60: a.d60 + x.d60, d90: a.d90 + x.d90, over: a.over + x.over, total: a.total + x.total }), { d30: 0, d60: 0, d90: 0, over: 0, total: 0 });
   const go = (tab, d) => onGo?.(tab === "입금확인" && !depositOn ? "거래처정산" : tab, d);
   const step = (k) => S.steps.find((x) => x.key === k) || { left: 0, amount: 0, total: 0 };
   const [y, m] = ym.split("-").map(Number);
@@ -100,11 +108,12 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
   const rows = React.useMemo(() => S.clients.map((c) => {
     const st = viewStage(c.stage); const idx = ["미작성", "작성", "계산서발행", "마감"].indexOf(st);
     const b = boardMap.get(c.client); const ct = closeText(b);
-    const unpaid = idx >= 3 ? 0 : Math.max(0, c.sale - c.paid);
+    // 💰 2026-11-27 이 달 미수 = 미수금 한 식(받은 돈은 오래된 청구부터 채움 · 부가세 포함). 명세서 '마감'만으로는 받은 것으로 안 본다
+    const unpaid = AR.ready ? Math.round(arOpenOf.get(`${c.client}|${ym}`) || 0) : Math.max(0, c.sale - c.paid);
     // 🗂 2026-11-16 진행 순서 — 마감 전(0) → 배차마감(1) → 명세서 작성(2) → 계산서 발행(3) → 입금 완료(4, 맨 아래)
     const level = unpaid <= 0 && c.sale > 0 ? 4 : idx >= 2 ? 3 : idx >= 1 ? 2 : ct.done ? 1 : 0;
     return { ...c, st, idx, ct, unpaid, level };
-  }).sort((a, b) => a.level - b.level || b.sale - a.sale), [S.clients, boardMap]);
+  }).sort((a, b) => a.level - b.level || b.sale - a.sale), [S.clients, boardMap, AR.ready, arOpenOf, ym]);
   const total = rows.length;
   const steps = [
     { k: "close", no: "01", label: "배차마감", done: rows.filter((r) => r.ct.done).length, total, test: (r) => !r.ct.done, go: () => go("거래처정산", { tab: "invoice", board: true }), link: "거래처정산" },
@@ -138,8 +147,8 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
         <div className="flex items-center gap-3 flex-wrap">
           <MonthPicker ym={ym} onChange={setYm} months={months} />
           <div className="ml-auto grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2" style={NUMS}>
-            {[["매출(청구)", S.sale, G.ink], ["매입(기사·지게차 등)", S.buy, G.sub], ["매출이익", S.profit, profitColor(S.profit, { neutral: G.ink })], ["미수 잔액", agingTotal.total, agingTotal.total ? G.bad : G.ink]].map(([l, v, c]) => (
-              <div key={l} className="text-right"><div className="text-[12.5px] font-bold text-[#5B6B85]">{l}</div><div className="text-[19px] font-black leading-tight whitespace-nowrap" style={{ color: c }}>{won(v)}<span className="text-[12.5px] text-[#9AA9C3] ml-0.5">원</span>{l === "매출이익" &&<MarginPct profit={S.profit} sales={S.sale} />}</div></div>))}
+            {[["매출(배차완료)", S.sale, G.ink, S.pendingSale ? `진행 중 청구 ${short(S.pendingSale)}원 별도` : ""], ["매입(기사·지게차 등)", S.buy, G.sub], ["매출이익", S.profit, profitColor(S.profit, { neutral: G.ink })], ["미수 잔액(부가세 포함)", AR.ready ? agingTotal.total : null, agingTotal.total ? G.bad : G.ink, AR.overpaidSum ? `과입금 ${short(AR.overpaidSum)}원` : "올해 전체"]].map(([l, v, c, sub]) => (
+              <div key={l} className="text-right"><div className="text-[12.5px] font-bold text-[#5B6B85]">{l}</div><div className="text-[19px] font-black leading-tight whitespace-nowrap" style={{ color: c }}>{v == null ? "…" : won(v)}<span className="text-[12.5px] text-[#9AA9C3] ml-0.5">원</span>{l === "매출이익" &&<MarginPct profit={S.profit} sales={S.sale} />}</div>{sub && <div className="text-[11.5px] font-bold text-[#9AA9C3] whitespace-nowrap">{sub}</div>}</div>))}
           </div>
         </div>
 
@@ -178,7 +187,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
             <table className="kp-sd kp-grid w-full" style={{ minWidth: 980 }}>
               <thead><tr className="text-left text-[13px] text-[#5B6B85]">
                 <th className={`${th} text-center w-[52px]`}>No</th><th className={th}>거래처</th><th className={`${th} text-right`}>건수</th><th className={`${th} text-right`}>청구액</th>
-                <th className={`${th} text-center`}>정산 진행 (배차마감 → 명세서 → 계산서 → 입금)</th><th className={`${th} text-right`}>미수금</th><th className={th} />
+                <th className={`${th} text-center`}>정산 진행 (배차마감 → 명세서 → 계산서 → 입금)</th><th className={`${th} text-right`}>미수금(부가세 포함)</th><th className={th} />
               </tr></thead>
               <tbody>{shown.map((r, i) => (
                 <tr key={r.client} onDoubleClick={() => openStmt(r.client)} className="border-t border-[#EEF2F8] hover:bg-[#F8FAFD]">
@@ -212,9 +221,9 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
             {[["30일 이내", agingTotal.d30, G.sub], ["31~60일", agingTotal.d60, G.warn], ["61~90일", agingTotal.d90, G.bad], ["90일 초과", agingTotal.over, G.bad]].map(([l, v, c], i) => (
               <div key={l} className={`px-4 py-2.5 ${i ? "border-l border-[#EEF2F8]" : ""}`}><div className="text-[12px] font-bold text-[#9AA9C3]">{l}</div><div className="text-[16px] font-black" style={{ color: v ? c : G.mute }}>{short(v)}</div></div>))}
           </div>
-          {S.aging.length === 0 ? <div className="py-10 text-center text-[14px] text-[#9AA9C3]">미수금이 없어요</div> : (
+          {!AR.ready ? <div className="py-10 text-center text-[14px] text-[#9AA9C3]">불러오는 중…</div> : arAging.length === 0 ? <div className="py-10 text-center text-[14px] text-[#9AA9C3]">미수금이 없어요</div> : (
             <div className="max-h-[300px] overflow-y-auto">
-              {S.aging.slice(0, 40).map((a) => { const old = a.over ? "90일+" : a.d90 ? "61일+" : a.d60 ? "31일+" : "30일 내"; const c = a.over || a.d90 ? G.bad : a.d60 ? G.warn : G.mute; return (
+              {arAging.slice(0, 40).map((a) => { const old = a.over ? "90일+" : a.d90 ? "61일+" : a.d60 ? "31일+" : "30일 내"; const c = a.over || a.d90 ? G.bad : a.d60 ? G.warn : G.mute; return (
                 <button key={a.client} type="button" onClick={() => setClient(a.client)} className={`w-full flex items-center gap-3 px-4 py-2.5 border-b border-[#EEF2F8] last:border-b-0 text-left hover:bg-[#F8FAFD] ${client === a.client ? "bg-[#EEF3FB]" : ""}`}>
                   <span className="w-[52px] shrink-0 text-[12.5px] font-black" style={{ color: c }}>{old}</span>
                   <span className="flex-1 min-w-0 truncate text-[14px] font-bold">{a.client}</span>
