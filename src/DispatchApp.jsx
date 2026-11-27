@@ -471,17 +471,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
   }, [open, onClose]);
   return (
     <>
-      {/* 접혀 있을 때 — 왼쪽 끝 손잡이 */}
-      {!open && (
-        <button
-          onClick={onOpen}
-          title="메뉴 펼치기"
-          className="kp-side-handle fixed left-0 top-1/2 -translate-y-1/2 z-[60] w-6 h-24 rounded-r-xl flex items-center justify-center text-white shadow-[0_8px_20px_rgba(15,26,48,0.3)] hover:w-8 transition-all"
-          style={{ background: "linear-gradient(180deg, #16264A 0%, #2D4C82 100%)", opacity: 1 }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
-        </button>
-      )}
+      {/* 🧭 2026-11-27 사용자 요청 — 왼쪽 끝 손잡이(메뉴 펼치기) 바는 없앴다(메뉴는 위 상단바 · 각 화면 왼쪽 메뉴로) */}
       {/* 펼쳤을 때 */}
       <div
         className={`fixed inset-0 z-[9990] bg-[#0F1A30]/40 backdrop-blur-[2px] transition-opacity duration-200 ${open ? "opacity-100" : "opacity-0 pointer-events-none"}`}

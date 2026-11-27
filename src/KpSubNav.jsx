@@ -260,6 +260,13 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
             </div>
           )}
         </nav>
+        {/* 🚚 2026-11-27 사용자 요청 — 왼쪽 메뉴 아래 LOGISWEB 트럭(홈 제외 · 접었을 때 · 낮은 화면에선 숨김) */}
+        {!collapsed && code !== "HOME" && (
+          <div data-kp="subnav-truck" aria-hidden="true" className="kp-subnav-truck relative shrink-0 pointer-events-none select-none" style={{ height: 200 }}>
+            <img src="/brand/lw-truck-side.jpg" alt="" draggable={false} className="absolute left-0 bottom-0 w-full h-[236px] object-cover"
+              style={{ WebkitMaskImage: "linear-gradient(180deg,transparent 0%,#000 34%)", maskImage: "linear-gradient(180deg,transparent 0%,#000 34%)" }} />
+          </div>
+        )}
         {/* 🛰 2026-11-10 버전 표시(상단바에서 옮김) — 새 버전이 있으면 눌러서 업데이트 */}
         <div data-kp="subnav-version" title={`현재 버전 v${APP_VER}`}
           className={`shrink-0 mx-3 mt-2 -mb-1 h-7 inline-flex items-center justify-center text-[11px] tabular-nums font-bold text-white/45 ${collapsed ? "!mx-2 !text-[9.5px]" : ""}`}
