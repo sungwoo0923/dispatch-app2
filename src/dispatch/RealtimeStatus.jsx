@@ -4333,7 +4333,7 @@ const head = isDark
     <button onClick={() => setQ(qInputRef.current?.value ?? "")} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.26528.조회" defaultText="조회" /></button>
   </div>
   <DetailFilterButton rows={rtDayRows} value={rtDetail} onApply={setRtDetail} withDate={false} getters={rtDetailGet} title="세부검색 · 실시간" />
-  <BizLegend biz={rtBiz} className="ml-1" />{/* ⭐ 2026-11-09 청구 사업자 색 범례 */}
+  {/* 🧹 2026-11-27 사용자 요청 — 청구 사업자 색 범례(사업자 이름 표시) 뺌 */}
   <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
   <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={lookupOpen ? (historyDispatchData || []).filter((r) => !r?.배차표Id) : []} nameOf={lookupNameOf} />{/* ⭐ 2026-11-06 실시간 조회에도 고정노선(배차표) 오더는 빼기 */}
   {/* ⭐ 2026-11-05 실시간 관제 — 지금 목록의 배차완료 지입·직영·임대 기사 전체 지도 */}

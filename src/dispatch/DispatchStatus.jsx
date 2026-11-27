@@ -3415,7 +3415,7 @@ return (
         </CustomSelect>
         {/* ⭐ 2026-11-05 세부검색 — 오른쪽 끝에서 상태 필터(전체/미배차/미전달) 바로 옆으로 옮김 */}
         <DetailFilterButton rows={dispatchData} value={dsDetail} onApply={applyDsDetail} getters={dsDetailGet} dateOf={dsDateOf} dateLabel={fixedForm ? "입고일 기준" : "상차일 기준"} title={fixedForm ? "세부검색 · 고정노선현황" : "세부검색 · 배차현황"} />
-        <BizLegend biz={dsBiz} className="ml-1" />{/* ⭐ 2026-11-09 청구 사업자 색 범례 */}
+        {/* 🧹 2026-11-27 사용자 요청 — 청구 사업자 색 범례(사업자 이름 표시) 뺌 */}
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}

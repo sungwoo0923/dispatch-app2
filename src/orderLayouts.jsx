@@ -149,12 +149,8 @@ export function SwapRouteButton({ form, onSwap, onMap }) {
       </button>
       {has && (<>
         <span className="w-px h-4 bg-[#DCE3EE]" />
-        <span className="inline-flex items-center gap-1.5 px-2.5 text-[12px] font-bold text-[#3A4A66] whitespace-nowrap" style={{ fontVariantNumeric: "tabular-nums" }}>
-          {r === undefined ? <span className="text-[#8A97B0]">거리 계산 중…</span>
-            : r ? <><b className="text-[13px] font-black text-[#0F1A30]">{r.km}km</b><span>· {dur(r.minutes)}</span>{eta && <span className="px-1.5 rounded-md bg-[#EEF2FA] text-[#2D4C82] font-black">도착 {eta}</span>}</>
-            : <span className="text-[#8A97B0]">경로를 못 찾았어요</span>}
-        </span>
-        <button type="button" onClick={onMap} className="h-6 mr-1 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11.5px] font-black hover:bg-[#0F1A30]">경로보기</button>
+        {/* 🧭 2026-11-27 사용자 요청 — 거리 · 시간 · 도착 글자는 빼고 [경로보기]만(날짜 줄이 한 줄을 넘지 않게). 거리는 말풍선으로 */}
+        <button type="button" onClick={onMap} title={r ? `${r.km}km · ${dur(r.minutes)}${eta ? ` · 도착 ${eta}` : ""}` : "경로보기"} className="h-6 mx-1 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11.5px] font-black hover:bg-[#0F1A30]">경로보기</button>
       </>)}
     </span>
   );
