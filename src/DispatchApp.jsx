@@ -50,7 +50,7 @@ import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
-import { ORDER_SKIN_CSS, nextSkin, skinName, readSkin, saveSkin } from "./orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드 기본 · 최고관리자만 기본 입력창과 전환
+import { ORDER_SKIN_CSS, nextSkin, skinName, readSkin, saveSkin, SKIN_SWITCH } from "./orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드 기본 · 최고관리자만 기본 입력창과 전환
 import { LAYOUT_SKINS, ORDER_LAYOUT_CSS, LayoutDecor, FareSummary, routeGrid } from "./orderLayouts"; // 🎨 A 루트 보드
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
@@ -11039,7 +11039,7 @@ function DmDot({ on, alert = false }) {
   // 🎨 2026-11-26 오더등록 디자인 시안 — 최고관리자만 [디자인 변경]으로 돌려 본다(입력칸 · 버튼 · 기능은 그대로, 모양만 · src/orderSkins.js)
   // 🎨 2026-11-27 모든 계정 = A 루트 보드 · 최고관리자만 [디자인 변경]으로 예전 기본 입력창과 오간다(이 기기에 기억)
   // 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpSkinTest=1 이면 다른 계정으로도 전환 점검 — 배포 빌드에는 들어가지 않는다
-  const skinAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })());
+  const skinAllowed = SKIN_SWITCH && (role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })()));
   const [ofSkin, setOfSkin] = React.useState(() => readSkin(true));
   const skinOn = skinAllowed ? ofSkin : readSkin(false);
   const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); saveSkin(n); return n; });
