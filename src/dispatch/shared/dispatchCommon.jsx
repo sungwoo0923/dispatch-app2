@@ -2260,6 +2260,12 @@ export const displayRegDate = (row) => {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 };
+
+/* -------------------------------------------------
+   안전 로컬 저장
+--------------------------------------------------*/
+export const safeLoad = (k, f) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch { return f; } };
+export const safeSave = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } };
 // 화주사 수정요청 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
 export const EDIT_REQUEST_FIELD_LABELS = {
   청구운임: "금액", 상차일: "상차일자", 하차일: "하차일자",
@@ -3840,6 +3846,30 @@ export const CARGO_VEHICLE_SPEC_TABLE = [
   { ton: "25톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "25톤",                    l: 1010, w: 240, maxKg: 27500 },
   { ton: "추레라", category: "표준",        bedLength: "12m",         widthRef: "약 2.4m",       name: "24/25톤 추레라",         l: 1200, w: 240, maxKg: 27500 },
   { ton: "",        category: "특장",        bedLength: "12m 이상/별도", widthRef: "차종별",      name: "저상·평판 등",           l: 1200, w: 240, maxKg: 32000 },
+];
+
+// 파렛트 종류별 규격·자체무게 — "RUN박성우충괄팀장님의 메시지" 기준표를 그대로 반영.
+// EL14처럼 무게가 범위로 안내된 경우 kg은 계산용 평균값을 쓰고 kgLabel에 원래
+// 범위 문구를 별도로 남긴다.
+export const PALLET_SPEC_TABLE = [
+  { code: "N11",  w: 1100, d: 1100, h: 150, kg: 19.5 },
+  { code: "N12",  w: 1200, d: 1000, h: 150, kg: 20 },
+  { code: "N15",  w: 1460, d: 1130, h: 150, kg: 27.5 },
+  { code: "P11",  w: 1100, d: 1100, h: 150, kg: 26 },
+  { code: "P13",  w: 1300, d: 1100, h: 150, kg: 25 },
+  { code: "P14",  w: 1350, d: 1100, h: 150, kg: 32 },
+  { code: "PA11", w: 1100, d: 800,  h: 150, kg: 18 },
+  { code: "L14",  w: 1437, d: 1127, h: 140, kg: 20 },
+  { code: "EL14", w: 1440, d: 1130, h: 150, kg: 26.5, kgLabel: "25.5~27.5 kg" },
+  { code: "EL15", w: 1500, d: 1500, h: 150, kg: 32 },
+  { code: "EL18", w: 1800, d: 1600, h: 150, kg: 58 },
+  { code: "EL20", w: 1960, d: 1960, h: 150, kg: 68.5 },
+  { code: "N48",  w: 1219, d: 1016, h: 150, kg: 23.8, note: "코스트코" },
+  { code: "W09",  w: 1100, d: 900,  h: 120, kg: 22 },
+  { code: "WT11", w: 1100, d: 1100, h: 144, kg: 45 },
+  { code: "WT12", w: 1200, d: 1000, h: 144, kg: 45 },
+  { code: "WT13", w: 1300, d: 1100, h: 144, kg: 51 },
+  { code: "C95",  w: 950,  d: 950,  h: 130, kg: 23 },
 ];
 
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
