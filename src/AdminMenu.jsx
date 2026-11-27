@@ -37,6 +37,7 @@ import { EMPLOYMENT_STATUS_OPTIONS, suggestRole, ROLE_NAME, isExecProfile, useHr
 import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
+import { execPinApi } from "./execPinApi"; // 🔐 2026-11-27 인사이트 PIN 초기화(서버)
 import { MfaResetPanel } from "./UserSecurity"; // 🔐 2026-11-14 직원 2차 인증 초기화
 import { useCustomRoles, roleScreen, ROLE_LABELS, roleOptionsFrom, rolesForTeam } from "./customRoles";
 import { useCompanyFeatures } from "./companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별로 켬)
@@ -1255,6 +1256,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           canSubAdmin={isSuperMe && u.email !== TOTAL_MASTER_EMAIL && u.role !== "shipper" && u.role !== "driver"} onSubAdmin={() => toggleSubAdmin(u)}
                           onResign={async () => { if (resigned && !await kpConfirm(`"${u.name || u.email}"님을 복직 처리할까요?`)) return; await setResignStatus(u, !resigned); }}
                           onDelete={async () => { if (await removeUser(u)) setMemberModal(false); }}
+                          onExecPinReset={["driver", "shipper", "cafeUser"].includes(u.role) || u.email === TOTAL_MASTER_EMAIL ? undefined : async () => {
+                            if (!await kpConfirm(`"${u.name || u.email}"님의 인사이트 PIN 을 초기화할까요?\n다음에 인사이트 · 지입차 완전 삭제를 열 때 새 번호를 정해요.`)) return;
+                            try { const r = await execPinApi.reset(u.id); alert(r?.had ? "초기화했어요. 다음에 들어갈 때 새로 정해요." : "아직 정한 PIN 이 없어요. 처음 들어갈 때 정하면 돼요."); }
+                            catch (e) { alert(e?.message || "초기화하지 못했어요. 잠시 뒤 다시 해 주세요."); }
+                          }}
                         />
                       )}
                     </div>
@@ -2148,7 +2154,7 @@ const LANDING_FONT_OPTIONS = [
 ];
 
 // 👤 회원 관리 창 — 버튼 하나로 열고, 그 안에서 승인·거절·정보수정·마스터·퇴사·삭제(모두 확인창)
-function MemberManageModal({ selfOnly = false, u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canSubAdmin = false, onSubAdmin, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
+function MemberManageModal({ selfOnly = false, u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, onExecPinReset, canSubAdmin = false, onSubAdmin, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const [busy, setBusy] = useState(false);
   const pending = u.approved === false && u.employmentStatus !== "퇴사"; // ⭐ 2026-11-02 점검 — 예전 계정(approved 없음)은 승인으로 보고 거절 버튼을 띄우지 않음
@@ -2225,6 +2231,17 @@ function MemberManageModal({ selfOnly = false, u, me, isTotalMaster, roles, role
               </div>
             )}
           </div>
+
+          {/* 🔐 2026-11-27 인사이트 · 지입차관리 완전 삭제 PIN 초기화 — 서버(execPinReset)가 같은 회사 마스터 · 관리자 · 최고관리자인지 다시 확인 */}
+          {!pending && !selfOnly && !isMe && onExecPinReset && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white border border-[#E3E8F0] px-4 py-3" data-exec-pin-reset>
+              <div className="min-w-0">
+                <div className="text-[13px] font-black text-[#0F1A30]">인사이트 PIN</div>
+                <div className="text-[11.5px] text-[#7A879C]">모바일 인사이트 · 지입차관리 완전 삭제에 쓰는 번호예요. 잊었다고 하면 초기화해요 → 다음에 들어갈 때 새로 정해요</div>
+              </div>
+              <button type="button" disabled={busy} onClick={run(onExecPinReset)} className="shrink-0 h-9 px-3.5 rounded-xl border border-red-200 text-red-600 text-[12.5px] font-black hover:bg-red-50 disabled:opacity-50">PIN 초기화</button>
+            </div>
+          )}
 
           {!pending && canAccount && (
             <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">

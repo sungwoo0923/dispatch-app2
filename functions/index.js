@@ -5059,6 +5059,15 @@ exports.pfPinStatus = payCall(_pfPin.status);
 exports.pfPinSet = payCall(_pfPin.setPin);
 exports.pfPinVerify = payCall(_pfPin.verify);
 exports.pfLock = payCall(_pfPin.lock);
+/* ==================================================================
+   🔐 2026-11-27 인사이트(모바일) · 지입차관리 완전 삭제 PIN(사람별) — 설명은 functions/execPin.js 맨 위
+   호출형 4개: execPinStatus · execPinSet · execPinVerify · execPinReset(같은 회사 마스터 · 관리자 · 최고관리자)
+================================================================== */
+const _execPin = require("./execPin").makeExecPin({ db, FieldValue, HttpsError: functions.https.HttpsError });
+exports.execPinStatus = payCall(_execPin.status);
+exports.execPinSet = payCall(_execPin.setPin);
+exports.execPinVerify = payCall(_execPin.verify);
+exports.execPinReset = payCall(_execPin.reset);
 exports.payrollPwReset = payCall(_payrollPw.resetPw); // ⭐ 2026-11-10 급여 비밀번호 잊었을 때(로그인 비밀번호로 본인 확인 후)
 
 /* ==================================================================

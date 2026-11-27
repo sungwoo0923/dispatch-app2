@@ -1,134 +1,26 @@
 // src/mobile/MobileIntelView.jsx — 경영인텔리전스 (모바일 totalMaster 전용)
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정
 import { isInsightRow, insightRange } from "../ProInsight";
 import { salesMonthOf, salesBillDateOf } from "../salesRule"; // 🗓 2026-11-25 달 = 청구월(마감월) // ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출 기준 공용
+import { useExecPinPad, execPinTexts, EXEC_PIN_FORGOT, clearLegacyExecPin } from "../execPinApi"; // 🔐 2026-11-27 PIN 서버 확인
 import { orderProfit } from "../forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
 const NAVY = "#1B2B4B";
-const PIN_KEY = "exec_intel_pin_v1";
-const BIOMETRIC_KEY = "exec_intel_biometric_v1";
-const BIOMETRIC_AUTO_KEY = "exec_intel_biometric_auto_v1";
-
-function ab2b64(buf) {
-  const bytes = new Uint8Array(buf);
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return btoa(s);
-}
-function b642ab(b64) {
-  const bin = atob(b64);
-  const buf = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-  return buf.buffer;
-}
+// 🔐 2026-11-27 PIN 은 서버에서 확인(functions/execPin.js) — 예전 기기 저장 PIN · 얼굴 · 지문(WebAuthn, 화면에서만 확인하던 것)은 뺐다
 
 // ────────────────────────────────────────────────
-//  PIN GATE (mobile inline-style) + 생체인증
+//  PIN GATE (mobile inline-style) — 숫자 패드는 그대로, 확인 · 잠금은 서버
 // ────────────────────────────────────────────────
 function MobilePinGate({ onVerified, accent = NAVY }) {
-  const hasPin = !!localStorage.getItem(PIN_KEY);
-  const [mode, setMode] = useState(hasPin ? "verify" : "setup1");
-  const [entered, setEntered] = useState("");
-  const [firstPin, setFirstPin] = useState("");
-  const [error, setError] = useState("");
-  const [animKey, setAnimKey] = useState(0);
-  const [hasBiometric, setHasBiometric] = useState(() => !!localStorage.getItem(BIOMETRIC_KEY));
-  const biometricSupported = false; // ✂ 2026-11-14 얼굴 · 지문 기능 전부 뺌(사용자 요청) — 비밀번호로만
-  const [bioLoading, setBioLoading] = useState(false);
-  const [bioAuto, setBioAuto] = useState(() => localStorage.getItem(BIOMETRIC_AUTO_KEY) === "1");
-  const autoTriggered = useRef(false);
-
-  const bump = () => { setAnimKey(k => k + 1); setEntered(""); setError(""); };
-
-  // 자동 생체인증 실행 (카카오톡처럼)
-  useEffect(() => {
-    if (mode === "verify" && hasBiometric && biometricSupported && bioAuto && !autoTriggered.current) {
-      autoTriggered.current = true;
-      const t = setTimeout(verifyBiometric, 350);
-      return () => clearTimeout(t);
-    }
-  }, []); // mount 시 1회만
-
-  const handleKey = (d) => {
-    if (d === "back") { setEntered(p => p.slice(0, -1)); return; }
-    if (entered.length >= 6) return;
-    const next = entered + d;
-    setEntered(next);
-    if (next.length < 6) return;
-
-    setTimeout(() => {
-      if (mode === "verify") {
-        if (next === localStorage.getItem(PIN_KEY)) { onVerified(); }
-        else { setError("비밀번호가 올바르지 않습니다"); bump(); }
-      } else if (mode === "setup1") {
-        setFirstPin(next); setEntered(""); setMode("setup2");
-      } else if (mode === "setup2") {
-        if (next === firstPin) { localStorage.setItem(PIN_KEY, next); onVerified(); }
-        else { setError("비밀번호가 일치하지 않습니다"); setFirstPin(""); setMode("setup1"); bump(); }
-      }
-    }, 200);
-  };
-
-  const registerBiometric = async () => {
-    if (!biometricSupported) { setError("이 기기는 생체인증을 지원하지 않습니다"); return; }
-    setBioLoading(true); setError("");
-    try {
-      const cred = await navigator.credentials.create({
-        publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)),
-          rp: { name: "배차 앱" },
-          user: { id: new Uint8Array([1, 0, 0, 0]), name: "intel_user", displayName: "경영인텔리전스" },
-          pubKeyCredParams: [
-            { type: "public-key", alg: -7 },
-            { type: "public-key", alg: -257 },
-          ],
-          authenticatorSelection: {
-            authenticatorAttachment: "platform",
-            userVerification: "required",
-          },
-          timeout: 60000,
-          attestation: "none",
-        },
-      });
-      localStorage.setItem(BIOMETRIC_KEY, ab2b64(cred.rawId));
-      setHasBiometric(true);
-      setError("생체인증이 등록되었습니다");
-    } catch (e) {
-      setError("생체인증 등록 실패: " + (e.message || "지원되지 않는 기기"));
-    } finally { setBioLoading(false); }
-  };
-
-  const verifyBiometric = async () => {
-    const credId = localStorage.getItem(BIOMETRIC_KEY);
-    if (!credId) return;
-    setBioLoading(true); setError("");
-    try {
-      await navigator.credentials.get({
-        publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)),
-          rpId: window.location.hostname || "localhost",
-          allowCredentials: [{ type: "public-key", id: b642ab(credId) }],
-          userVerification: "required",
-          timeout: 60000,
-        },
-      });
-      onVerified();
-    } catch (e) {
-      setError("생체인증 실패. 비밀번호를 입력하세요");
-    } finally { setBioLoading(false); }
-  };
-
-  const heading =
-    mode === "verify" ? "보안 인증" :
-    mode === "setup1" ? "비밀번호 설정" : "비밀번호 확인";
-  const sub =
-    mode === "verify" ? "6자리 비밀번호를 입력하세요" :
-    mode === "setup1" ? "사용할 6자리 비밀번호를 입력하세요" :
-    "비밀번호를 한 번 더 입력하여 확인하세요";
+  const pad = useExecPinPad({ onVerified });
+  const { phase, entered, error, info, busy, locked, animKey, length } = pad;
+  const [heading, sub] = execPinTexts(phase);
+  const showPad = phase === "verify" || phase === "setup1" || phase === "setup2";
+  const font = "'Noto Sans KR', sans-serif";
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "70vh", background: "#f4f6f9", padding: 24 }}>
@@ -143,105 +35,59 @@ function MobilePinGate({ onVerified, accent = NAVY }) {
           </div>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.2em", color: "#d1d5db", marginBottom: 6 }}>CONFIDENTIAL</div>
           <div style={{ fontSize: 18, fontWeight: 900, color: accent }}>{heading}</div>
-          <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6, textAlign: "center" }}>{sub}</div>
+          <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6, textAlign: "center" }}>{busy ? "확인하는 중…" : sub}</div>
         </div>
 
-        {/* 생체인증 버튼 (verify 모드, 등록된 경우) */}
-        {mode === "verify" && hasBiometric && biometricSupported && (
-          <button
-            onClick={verifyBiometric}
-            disabled={bioLoading}
-            style={{
-              width: "100%", marginBottom: 20, padding: "14px 0",
-              background: accent, color: "white", borderRadius: 14, border: "none",
-              fontSize: 14, fontWeight: 700, cursor: bioLoading ? "not-allowed" : "pointer",
-              opacity: bioLoading ? 0.6 : 1,
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-              fontFamily: "'Noto Sans KR', sans-serif",
-            }}
-          >
-            {/* 지문 아이콘 */}
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z"/>
-              <path d="M8.5 8.5C9.3 7.6 10.6 7 12 7s2.7.6 3.5 1.5"/>
-              <path d="M7 11c0-2.76 2.24-5 5-5s5 2.24 5 5"/>
-              <path d="M9 12.5c0-1.66 1.34-3 3-3s3 1.34 3 3"/>
-              <path d="M12 12v4"/>
-              <path d="M10 14c0 1.1.9 2 2 2s2-.9 2-2"/>
-            </svg>
-            {bioLoading ? "인증 중..." : "지문 / Face ID로 인증"}
-          </button>
+        {showPad && (
+          <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 20 }}>
+            {Array.from({ length }).map((_, i) => (
+              <div key={i} style={{
+                width: 14, height: 14, borderRadius: "50%",
+                background: i < entered.length ? accent : "white",
+                border: `2px solid ${i < entered.length ? accent : "#d1d5db"}`,
+                transition: "all .15s",
+              }} />
+            ))}
+          </div>
         )}
 
-        {/* 도트 */}
-        <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 20 }}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} style={{
-              width: 14, height: 14, borderRadius: "50%",
-              background: i < entered.length ? accent : "white",
-              border: `2px solid ${i < entered.length ? accent : "#d1d5db"}`,
-              transition: "all .15s",
-            }} />
-          ))}
-        </div>
-
+        {info && !error && (
+          <div style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "#1B2B4B", background: "#EEF3FC", borderRadius: 8, padding: "8px 12px", marginBottom: 14 }}>{info}</div>
+        )}
         {error && (
           <div style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "#ef4444", background: "#fef2f2", borderRadius: 8, padding: "8px 12px", marginBottom: 14 }}>{error}</div>
         )}
 
-        {/* 키패드 */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-          {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
-            <button
-              key={i}
-              onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))}
-              disabled={d === null}
-              style={{
-                height: 52, borderRadius: 12, border: "1px solid #e5e7eb",
-                background: d === "←" ? "#f3f4f6" : "#f8f9fb",
-                color: d === "←" ? "#6b7280" : accent,
-                fontSize: d === "←" ? 15 : 18, fontWeight: 600,
-                cursor: d === null ? "default" : "pointer",
-                opacity: d === null ? 0 : 1,
-                fontFamily: "'Noto Sans KR', sans-serif",
-              }}
-            >{d}</button>
-          ))}
-        </div>
+        {phase === "netError" && (
+          <button onClick={pad.retry} style={{ width: "100%", height: 46, borderRadius: 12, border: "none", background: accent, color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: font }}>다시 시도</button>
+        )}
 
-        {/* 하단 링크들 */}
-        <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 8 }}>
-          {mode === "verify" && (
-            <button
-              onClick={() => { localStorage.removeItem(PIN_KEY); setMode("setup1"); setEntered(""); setError(""); setFirstPin(""); }}
-              style={{ textAlign: "center", fontSize: 12, color: "#d1d5db", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif" }}
-            >
-              비밀번호를 잊으셨나요? — 재설정
-            </button>
-          )}
-          {mode === "verify" && biometricSupported && (
-            <button
-              onClick={hasBiometric ? () => { localStorage.removeItem(BIOMETRIC_KEY); localStorage.removeItem(BIOMETRIC_AUTO_KEY); setHasBiometric(false); setBioAuto(false); setError("생체인증이 해제되었습니다"); } : registerBiometric}
-              disabled={bioLoading}
-              style={{ textAlign: "center", fontSize: 12, padding: "8px 0", color: hasBiometric ? "#d1d5db" : "#6b7280", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif" }}
-            >
-              {bioLoading ? "처리 중..." : hasBiometric ? "생체인증 해제" : "지문 / Face ID 등록"}
-            </button>
-          )}
-          {mode === "verify" && hasBiometric && biometricSupported && (
-            <button
-              onClick={() => {
-                const next = !bioAuto;
-                setBioAuto(next);
-                localStorage.setItem(BIOMETRIC_AUTO_KEY, next ? "1" : "0");
-                setError(next ? "다음부터 자동으로 생체인증이 실행됩니다" : "자동 생체인증이 해제되었습니다");
-              }}
-              style={{ textAlign: "center", fontSize: 12, padding: "8px 0", color: bioAuto ? accent : "#9ca3af", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif", fontWeight: bioAuto ? 700 : 400 }}
-            >
-              {bioAuto ? "✓ 자동 생체인증 사용 중 (누르면 해제)" : "자동 생체인증 사용"}
-            </button>
-          )}
-        </div>
+        {/* 키패드 */}
+        {showPad && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, opacity: busy || locked ? 0.5 : 1 }}>
+            {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
+              <button
+                key={i}
+                onClick={() => d !== null && pad.press(d === "←" ? "back" : String(d))}
+                disabled={d === null || busy || !!locked}
+                style={{
+                  height: 52, borderRadius: 12, border: "1px solid #e5e7eb",
+                  background: d === "←" ? "#f3f4f6" : "#f8f9fb",
+                  color: d === "←" ? "#6b7280" : accent,
+                  fontSize: d === "←" ? 15 : 18, fontWeight: 600,
+                  cursor: d === null ? "default" : "pointer",
+                  opacity: d === null ? 0 : 1,
+                  fontFamily: font,
+                }}
+              >{d}</button>
+            ))}
+          </div>
+        )}
+
+        {/* 하단 안내 — 예전 [재설정]은 누구나 새 번호를 정할 수 있어 뺐다 */}
+        {phase === "verify" && (
+          <div style={{ marginTop: 18, textAlign: "center", fontSize: 12, color: "#9ca3af", lineHeight: 1.5, fontFamily: font }}>{EXEC_PIN_FORGOT}</div>
+        )}
       </div>
     </div>
   );
@@ -272,6 +118,8 @@ export default function MobileIntelView({ dispatchData: allDispatchData = [], ca
   const [verified, setVerified] = useState(() => {
     return sessionStorage.getItem("exec_intel_ok") === "1";
   });
+
+  useEffect(() => { clearLegacyExecPin(); }, []); // 🔐 2026-11-27 예전 기기 저장 PIN 지우기(이제 서버에서 확인)
 
   const handleVerified = () => {
     sessionStorage.setItem("exec_intel_ok", "1");
