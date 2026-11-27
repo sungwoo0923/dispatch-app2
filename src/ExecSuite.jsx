@@ -497,7 +497,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           <BTile en="FORECAST" label="월말 예상 매출" money={forecast} foot={prevAvail ? `전월 실적 ${fmtMoney(pFullSale)}` : undefined} delta={prevAvail && pFullSale ? pctChange(forecast, pFullSale) : undefined} deltaLabel="전월 대비"
             side={<Ring value={(dayNo / dim) * 100} size={52} stroke={4.5} label={`${dayNo}/${dim}`} sub="일" />} title="이번 달 경과일 비율 · 현 추세 기준(일평균 매출 × 이번 달 일수)" />
           {isCeo && (F.has
-            ? <BTile en="TREASURY" label="보유 자금" money={F.cash} onClick={() => onGo?.("자금현황")} foot={F.runway != null ? `운영 가능 기간 ${F.runway.toFixed(1)}개월` : "자금현황 ›"}
+            ? <BTile en="TREASURY" label="보유 자금" money={F.cash} onClick={() => onGo?.("자금현황")} foot={/* 📏 2026-11-27 잔액 맞춘 날이 30일 넘게 지났거나 통장 없이 적힌 장부가 있으면 먼저 알려 준다 */ F.baseDate && F.baseDate < addDay(today, -30) ? `잔액 확인 필요 · ${Number(F.baseDate.slice(5, 7))}/${Number(F.baseDate.slice(8, 10))} 기준${F.unlinked ? ` · 통장 미지정 ${F.unlinked}건` : ""}` : F.unlinked ? `통장 미지정 장부 ${F.unlinked}건 — 자금관리에서 통장을 골라 주세요` : F.runway != null ? `운영 가능 기간 ${F.runway.toFixed(1)}개월` : "자금현황 ›"}
               delta={undefined} title="예금 · 현금 잔액(경리 입력 기준): 선택하면 자금현황으로 이동합니다" />
             : <BTile en="TREASURY" label="보유 자금" muted value={F.ready ? "자금관리 입력 전" : "불러오는 중…"} foot="경리 담당자가 예금 잔액을 입력하면 표시됩니다" onClick={() => onGo?.("자금현황")} />)}
           {ar ? <BTile en="RECEIVABLES" label="미수금" money={ar.total} foot={ar.over30 > 0 ? <span style={{ color: EX.warn }}>30일 초과 {fmtMoney(ar.over30)}</span> : `${ar.clients}곳 · 부가세 포함`} onClick={() => onGo?.("경영분석")} title="올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금액" />

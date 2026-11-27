@@ -65,5 +65,10 @@ export function computeFunds(funds = [], ledger = []) {
   const past = [3, 2, 1].map(ymAgo).map(flow).filter((x) => x.out > 0);
   const avgOut = past.length ? past.reduce((s, x) => s + x.out, 0) / past.length : monthly[2].out;
   const runway = avgOut > 0 ? cash / avgOut : null;
-  return { list, byId: out, inCash, cash, loan, cardMonth, monthly, avgOut, runway, thisMonth: monthly[2] };
+  // 📏 2026-11-27 시뮬레이션 — 경영 HOME 보유 자금이 "11.27 기준"으로 보였지만 실제로는 5/1 에 맞춘 잔액 + 통장이 지정된 장부 줄뿐이었다.
+  //  가장 오래 안 맞춘 통장의 기준일(baseDate)과 통장 없이 적힌 이번 달 장부 줄 수(unlinked)를 같이 알려 화면이 "잔액 확인 필요"를 띄우게 한다
+  const cashList = list.filter(inCash);
+  const baseDate = cashList.map((f) => String(f.base?.date || "")).filter(Boolean).sort()[0] || "";
+  const unlinked = ledger.filter((r) => !r.fundId && String(r.date || "") >= baseDate && String(r.date || "").startsWith(thisM)).length;
+  return { list, byId: out, inCash, cash, loan, cardMonth, monthly, avgOut, runway, thisMonth: monthly[2], baseDate, unlinked };
 }

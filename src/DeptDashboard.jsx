@@ -469,7 +469,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
 
       <div className="dd-kpi">
         <KTile primary code="CASH" label="보유 자금" value={F.has ? short(F.cash) : "미입력"} unit={F.has ? "원" : ""}
-          foot={F.has ? <>이번 달 수입 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(inSum)}</b> · 지출 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(outSum)}</b></> : "자금관리에서 통장 잔액 입력"}
+          foot={F.has && (F.unlinked || (F.baseDate && F.baseDate < kst(-30))) ? <span style={{ color: WARN }}>잔액 확인 필요{F.baseDate ? ` · ${Number(F.baseDate.slice(5, 7))}/${Number(F.baseDate.slice(8, 10))} 기준` : ""}{F.unlinked ? ` · 통장 미지정 ${F.unlinked}건` : ""}</span> : F.has ? <>이번 달 수입 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(inSum)}</b> · 지출 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(outSum)}</b></> : "자금관리에서 통장 잔액 입력"}
           spark={(F.monthly || []).map((x) => x.in - x.out)} />
         <KTile code="REVENUE" label="이번 달 매출" value={short(cur[0])} unit="원" foot={`${cur[2].toLocaleString()}건 · 전월 ${short(prev[0])}원`} spark={six.map((x) => x.sale)} />
         <KTile code="PAYOUT" label="매입(기사운임)" value={short(cur[1])} unit="원" foot={`전월 ${short(prev[1])}원`} spark={six.map((x) => x.buy)} />
