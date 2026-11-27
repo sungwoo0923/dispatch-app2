@@ -165,7 +165,7 @@ function BoardSettings({ me, auto, onClose, toast }) {
   );
 }
 
-// ── 등록내역(24시콜 등록내역 구조 참고) — 기간 · 단계 · 결제 · 화물번호/차주전화 검색 · 내꺼보기
+// ── 등록내역 — 기간 · 단계 · 결제 · 화물번호/차주전화 검색 · 내꺼보기
 const PST = [["all", "전체"], ["open", "접수"], ["done", "배차완료"], ["cancelled", "화물취소"]];
 const PPAY = [["all", "전체"], ["card", "카드"], ["deposit", "인수증"], ["cash", "선착불"]];
 const ppayOf = (m) => (m === "카드" ? "card" : payKind(m));

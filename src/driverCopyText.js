@@ -110,11 +110,7 @@ const COLD_NOTICE = `★★★필독★★★
 2. 상/하차 후 상하차 사진도 꼭 찍어서 공유 주시거나 보관하시면
 문제 발생 시 도움 될 수 있습니다.
 상/하차지 이슈 발생 시 반드시 사전 연락 바랍니다.
-(사진 전송 후 전화는 안 주셔도 됩니다)
-
-3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다.
-금요일 계산서 발행인 경우 익주 월요일에 결제됩니다.
-(공휴일도 동일하게 적용됩니다)`;
+(사진 전송 후 전화는 안 주셔도 됩니다)`;
 
 // 🚚 일반 차량용 (🔥 동일 포맷으로 통일)
 const NORMAL_NOTICE = `★★★필독★★★
@@ -129,11 +125,7 @@ const NORMAL_NOTICE = `★★★필독★★★
 
 2. 상/하차 사진 찍어서 보관 또는 공유주시면 문제 발생 시 도움 될 수 있습니다. 
 사진은 꼭 찍어 두세요.
-상·하차 이슈 발생 시 반드시 사전 연락 바랍니다.
-
-3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다. 
-금요일 계산서 발행인 경우 익주 월요일에 결제됩니다. 
-(공휴일도 동일하게 적용됩니다)`;
+상·하차 이슈 발생 시 반드시 사전 연락 바랍니다.`;
 
 // 🔥 반찬단지 전용 안내문
 const BANCHAN_NOTICE = `
@@ -297,7 +289,7 @@ const _ctBody5d = `${isChain5d ? "" : dateNotice}${dateText}${r.운행유형==="
 ${coreBlock5d}
 
 화물 : ${_totTon5d}${_totCargo5d?` / ${_totCargo5d}`:""} ${r.차량종류||"-"}
-결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식||"-")}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}`;
+결제방법 : ${r.지급방식 === "계산서" ? `계산서(${(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식||"-")}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}`;
 return buildCopyText("driver", {
   body: _ctBody5d,
   vars: copyVarsOf(r, { 업로드링크: uploadUrl, cold: _ctCold5d, plate, name, phone, fare, payLabel, company: userCompany }),
