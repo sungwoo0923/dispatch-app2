@@ -373,7 +373,9 @@ ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate
 .of-lay-k .kp-order-form input:focus,.of-lay-k .kp-order-form select:focus{border-color:#1B2B4B!important;box-shadow:0 0 0 3px rgba(45,76,130,.12)!important;outline:none!important}
 .of-lay-k .kp-order-form > [data-of="fsale"] input,.of-lay-k .kp-order-form > [data-of="fdrv"] input,.of-lay-k .kp-order-form > [data-of="ffee"] input{text-align:right;font-variant-numeric:tabular-nums;font-weight:800!important}
 .of-lay-k .kp-order-form > [data-of="memo"]{grid-template-columns:1fr 1fr!important;gap:10px!important}
-.of-lay-k .kp-order-form > [data-of="memo"] span.tracking-\[0\.26em\]{display:none!important}
+.of-lay-k .kp-order-form > [data-of="memo"] span[class*="tracking-[0.26em]"]{display:none!important}
+.of-lay-k .kp-order-form > [data-of="memo"] > section{min-width:0}
+.of-lay-k .kp-order-form > [data-of="memo"] header{min-width:0;padding-left:12px!important;padding-right:10px!important;gap:6px!important}
 .of-lay-k .kp-order-form > [data-of="memo"] button{white-space:nowrap!important}
 .of-lay-k .kp-order-form > [data-of="memo"] textarea{min-height:56px!important}
 .of-lay-k .kp-order-form > [data-of="ss"] textarea{min-height:34px!important;height:34px!important}
