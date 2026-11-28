@@ -656,6 +656,8 @@ function DmDot({ on, alert = false }) {
   const K_W = 1280; // 🗺 2026-11-28 지도를 크게 — 입력창 설계 폭을 줄여(글씨 크기는 그대로) 남는 폭을 지도에
   const kFitRef = React.useRef(null);
   const [kScale, setKScale] = React.useState(1);
+  const [kMapBelow, setKMapBelow] = React.useState(false); // 🛠 2026-11-28 좁은 화면 — 지도를 입력창 아래로
+  const [kMapMin, setKMapMin] = React.useState(560); // 🛠 2026-11-28 오른쪽 지도 최소 폭(좁은 화면은 입력창에 자리를 더 준다)
   const [kW, setKW] = React.useState(K_W);
   const [kPanelH, setKPanelH] = React.useState(720); // 오른쪽 지도 높이 = 화면에 남은 높이 // 높이 때문에 작게 그릴 땐 남는 폭을 채우게 설계 폭을 조금 넓힌다(최대 1.3배)
   React.useEffect(() => {
@@ -671,10 +673,18 @@ function DmDot({ on, alert = false }) {
       const scroller = el.closest("main");
       const top = el.getBoundingClientRect().top + (scroller ? scroller.scrollTop : window.scrollY);
       const availH = window.innerHeight - top - 14;
-      const byW = (total - 560 - 16) / K_W; // 지도는 최소 560px
-      const byH = designH > 0 && availH > 200 ? availH / designH : byW;
-      const next = Math.max(0.6, Math.min(1.6, Math.round(Math.min(byW, Math.max(0.8, byH)) * 1000) / 1000));
+      // 🛠 2026-11-28 사용자 요청 — 입력창이 너무 작아질 것 같으면 지도를 줄인다(560 → 최소 340px). 입력창 배율은 0.8 이상을 먼저 지킨다
+      const byH = designH > 0 && availH > 200 ? availH / designH : 1;
+      const want = Math.min(1.6, Math.max(0.8, byH));
+      let mapMin = 560;
+      while (mapMin > 340 && (total - mapMin - 16) / K_W < Math.min(want, 0.86)) mapMin -= 20;
+      // 지도를 340px까지 줄여도 입력창이 0.72배보다 작아지면(노트북 화면) 지도를 입력창 아래로 내리고 입력창은 폭을 다 쓴다
+      const below = (total - 340 - 16) / K_W < 0.72;
+      setKMapBelow((v) => (v !== below ? below : v));
+      const byW = below ? total / K_W : (total - mapMin - 16) / K_W;
+      const next = Math.max(0.6, Math.min(1.6, Math.round(Math.min(byW, below ? 1.2 : want) * 1000) / 1000));
       setKScale((v) => (Math.abs(v - next) > 0.005 ? next : v));
+      setKMapMin((v) => (v !== mapMin ? mapMin : v));
       setKW(K_W);
       const ph = Math.max(560, Math.round(availH));
       setKPanelH((v) => (Math.abs(v - ph) > 4 ? ph : v));
@@ -5981,7 +5991,7 @@ React.useEffect(() => {
 {/* 🧾 2026-11-09 특수운임 적용 — 지게차비용·대기료·경유·할증 등(팝업). 블라인드와 같은 줄, 조회전용 외 모든 직원 */}
 {!isViewerNow() && <SpecialFareButton form={form} setForm={setForm} btnClass={dmToggleCls} />}
   {(areaFareHint || distanceFareEstimate) && (
-    <div
+    <div data-k-farehint /* 🛠 2026-11-28 새 오더등록(운행 옵션 칸)에서는 좁은 칸에 맞는 2줄 카드(orderLayouts K CSS) */
       className="mt-2 flex items-center gap-3 bg-[#1B2B4B] rounded-lg px-4 py-2 text-sm cursor-pointer hover:bg-[#243a60] transition"
       onClick={() => {
         const inputTon = getTotalTonFromOrder(form);
@@ -6020,28 +6030,28 @@ React.useEffect(() => {
         setFareHistoryOpen(true);
       }}
     >
-      <span className="font-semibold text-white">
+      <span data-fh="route" className="font-semibold text-white">
         {areaFareHint ? `${areaFareHint.pickupLabel} → ${areaFareHint.dropLabel}` : `${form.상차지주소?.slice(0, 12) || ""} → ${form.하차지주소?.slice(0, 12) || ""}`}
       </span>
-      <span className="text-white/60 text-xs">
+      <span data-fh="basis" className="text-white/60 text-xs">
         {areaFareHint
           ? <>기준: {areaFareHint.motorFallback ? "일반차량(오토바이 참고)" : areaFareHint.level}<span className="ml-1">({areaFareHint.count}건)</span></>
           : `티맵 ${distanceFareEstimate.distance}km 기준 추정${distanceFareEstimate.surchargeLabel ? ` · ${distanceFareEstimate.surchargeLabel} 할증 +${Math.round(distanceFareEstimate.surchargeRate * 100)}%` : ""}`}
       </span>
-      <span className="ml-auto font-bold text-white">
+      <span data-fh="range" className="ml-auto font-bold text-white">
         {areaFareHint
           ? `${areaFareHint.min.toLocaleString()} ~ ${areaFareHint.max.toLocaleString()}원`
           : `${distanceFareEstimate.min.toLocaleString()} ~ ${distanceFareEstimate.max.toLocaleString()}원`}
       </span>
       {distanceFareEstimate && areaFareHint && (
-        <span className="text-white/50 text-[11px] border-l border-white/20 pl-3 whitespace-nowrap">
+        <span data-fh="tmap" className="text-white/50 text-[11px] border-l border-white/20 pl-3 whitespace-nowrap">
           티맵 {distanceFareEstimate.distance}km 기준 {distanceFareEstimate.min.toLocaleString()}~{distanceFareEstimate.max.toLocaleString()}원
         </span>
       )}
       {form.상차지주소 && form.하차지주소 && (
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); setShowFareRouteMap(true); }}
+          onClick={(e) => { e.stopPropagation(); setShowFareRouteMap(true); }} data-fh="btn"
           className="ml-2 px-2 py-0.5 text-[11px] font-bold rounded border border-white/30 text-white hover:bg-white/10 transition shrink-0"
         >
           경로보기
@@ -9479,7 +9489,7 @@ className={`
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
 {skinOn !== "base" && <style>{ORDER_SKIN_CSS}</style>}{/* 🎨 디자인 시안(최고관리자) */}
 {layOn && <style>{ORDER_LAYOUT_CSS + ofGrid.css}</style>}
-<div className={`flex items-stretch gap-3 w-full mb-4 of-skin of-skin-${skinOn}${layOn ? ` of-lay of-lay-${skinOn}` : ""}`} style={{ minWidth: 0 }}>
+<div className={`flex items-stretch gap-3 w-full mb-4 of-skin of-skin-${skinOn}${layOn ? ` of-lay of-lay-${skinOn}` : ""}`} style={{ minWidth: 0, ...(kOn && kMapBelow ? { flexWrap: "wrap" } : null) }}>
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
   {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
@@ -9498,8 +9508,8 @@ className={`
       이 패널은 원래대로 단일 상/하차일 선택 전용으로 유지한다. */}
   {kOn ? (
     // 🗺 시안 L — 오른쪽에 늘 떠 있는 실시간 경로 지도(상 · 하차 주소가 들어오면 경로 · 거리 · 시간 · 유류비 · 통행료)
-    <div className="flex-1 min-w-[560px] self-start sticky top-0">
-      <OrderRouteMapPanel form={form} height={kPanelH} onOpenBig={() => setShowFareRouteMap(true)} />
+    <div className={kMapBelow ? "w-full" : "flex-1 self-start sticky top-0"} style={kMapBelow ? { flexBasis: "100%", minWidth: 0 } : { minWidth: kMapMin }}>
+      <OrderRouteMapPanel form={form} height={kMapBelow ? 460 : kPanelH} onOpenBig={() => setShowFareRouteMap(true)} />
     </div>
   ) : skinOn === "route" ? (
     // 🎨 A 루트 보드 — 달력 위에 운임 요약(보기만 · 입력은 왼쪽 칸)

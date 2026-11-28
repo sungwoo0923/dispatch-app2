@@ -316,7 +316,7 @@ export function BizSelect({ biz, value, onChange, className = "", auto = "", inl
         onBlur={() => { setOpen(false); setQ(""); }}
         onChange={(e) => { const t = e.target.value; const base = cur || ""; setQ(!open && base && t.startsWith(base) ? t.slice(base.length) : t); setOpen(true); setActive(0); }}
         onKeyDown={onKeyDown} title={auto ? `자동: ${BIZ_SRC_LABEL[auto] || "자동으로 맞춰졌어요"} (바꿀 수 있어요)` : "청구 사업자: 글자를 쳐서 찾고 ↑↓ Enter"}
-        className={`${className} cursor-pointer !pr-[68px]`} />
+        className={`${className} cursor-pointer ${auto && !open ? "!pr-[68px]" : "!pr-[30px]"}`} /* 🛠 2026-11-28 [자동] 표시가 없으면 오른쪽 여백을 줄여 사업자 이름이 잘리지 않게 */ />
       <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
         {auto && !open && <span className="px-1.5 h-[18px] inline-flex items-center rounded-md bg-[#EEF3FC] border border-[#D5E0F5] text-[10px] font-extrabold text-[#2D4C82]">자동</span>}
         <span className={`text-[#7A8AA6] transition-transform ${open ? "rotate-180" : ""}`}>{Ico.chev}</span>
