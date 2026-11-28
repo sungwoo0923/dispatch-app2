@@ -102,7 +102,7 @@ function Tile({ code, label, value, unit, foot, spark, sparkId, primary, valueCo
     <div className={primary ? "hd-tile hd-tile-on" : "hd-tile"} style={{ borderRadius: 16, padding: "14px 16px 10px", position: "relative", overflow: "hidden", minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{label}</span>
-        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: C.dim, whiteSpace: "nowrap", overflow: "hidden", flexShrink: 1, minWidth: 0, marginLeft: 6 }}>{code}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: C.dim, whiteSpace: "nowrap", overflow: "hidden", flexShrink: 1, minWidth: 0, marginLeft: 6 }} className="hd-tile-code">{code}</span>
       </div>
       <div style={{ marginTop: 8, display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
         <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 27, fontWeight: 800, color: valueColor || "#fff", letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</span>
@@ -170,7 +170,7 @@ export const DECK_LABELS = {
   mix: "최근 7일 차종 구성", routes: "최근 7일 주요 노선", weekday: "요일별 평균 오더", empty: "이번 달 오더가 아직 없습니다",
 };
 //  📏 2026-11-25 fixedRows = 고정거래처 매출(매출관리와 같게 매출 · 수익에 더함 · 건수에는 안 셈) · isMoney = 매출에 넣을 줄(기본 배차완료 — 화물 홈은 따로 넘김)
-export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null, todo = null, labels = null, weather = null, fixedRows = null, isMoney = isSalesOrder }) {
+export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null, todo = null, labels = null, weather = null, fixedRows = null, isMoney = isSalesOrder, compact = false }) { // 📱 2026-11-28 compact = 휴대폰 운송 홈(한 줄씩 쌓기 · PC 숫자 그대로)
   const L = labels ? { ...DECK_LABELS, ...labels } : DECK_LABELS;
   const today = kstToday();
   const thisMonth = today.slice(0, 7);
@@ -335,7 +335,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
   const metric = (g) => (rankBy === "profit" ? g.p : rankBy === "cnt" ? g.c : g.s);
 
   return (
-    <section className="hd-deck" style={{ position: "relative", overflow: "hidden", borderRadius: 26, padding: "22px 24px 24px", color: C.ink, minHeight: "calc(100vh - 120px)" }}>
+    <section className={compact ? "hd-deck hd-compact" : "hd-deck"} style={{ position: "relative", overflow: "hidden", borderRadius: compact ? 22 : 26, padding: compact ? "18px 14px 18px" : "22px 24px 24px", color: C.ink, minHeight: compact ? 0 : "calc(100vh - 120px)" }}>
       <style>{HD_CSS}</style>
       <div className="hd-scan" />
 
@@ -348,7 +348,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
               <span className="hd-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: C.hi, boxShadow: `0 0 8px ${C.glow}` }} />LIVE
             </span>
           </div>
-          <h1 style={{ margin: "8px 0 0", fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em", color: "#fff" }}>{myName ? `${myName}님 반갑습니다, 좋은 하루 되세요.` : "반갑습니다, 좋은 하루 되세요."}</h1>
+          <h1 style={{ margin: "8px 0 0", fontSize: compact ? 21 : 28, fontWeight: 900, letterSpacing: "-0.02em", color: "#fff" }}>{myName ? `${myName}님 반갑습니다, 좋은 하루 되세요.` : "반갑습니다, 좋은 하루 되세요."}</h1>
           <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 600, color: C.sub }}>
             {L.orders} <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{t0[2].toLocaleString()}</b>건 · {L.done} <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{doneToday.toLocaleString()}</b>건 · 오늘 매출 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(t0[0])}</b>원
           </p>
@@ -367,7 +367,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       {todo}
       {/* ── KPI 타일 ── */}
       {/* ⭐ 2026-11-04 폴더블(펼친 화면 884px)·태블릿 — 본문이 좁으면 5칸을 억지로 한 줄에 넣지 않고 줄을 나눈다(글자가 한 자씩 세로로 쪼개졌다) */}
-      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: compact ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(160px, 1fr))", gap: compact ? 10 : 12, marginBottom: 14 }}>
         <Tile primary code="ORDERS" label={L.orders} value={t0[2].toLocaleString()} unit="건" spark={sparkC} sparkId="hdS1"
           foot={<><Delta cur={t0[2]} prev={t1[2]} /><span>어제 대비</span></>} />
         <Tile code="REVENUE" label="오늘 매출" value={won(t0[0])} unit="원" spark={sparkS} sparkId="hdS2"
@@ -383,7 +383,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       {/* 🌦 2026-11-18 운행 지역 날씨(오늘 · 내일 오더 지역 · 기상특보) — 날씨는 대시보드에만(배차 목록에서는 뺐다) */}
       {weather}
       {/* ── 매출 추이 + 게이지 ── */}
-      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,2.25fr) minmax(250px,1fr)", gap: 14, marginBottom: 14 }}>
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: compact ? "minmax(0,1fr)" : "minmax(0,2.25fr) minmax(250px,1fr)", gap: 14, marginBottom: 14 }}>
         <Panel code="TREND" title="매출 추이" right={<Seg value={range} onChange={setRange} items={[["7d", "7일"], ["30d", "30일"], ["year", "올해"]]} />}>
           <div style={{ display: "flex", gap: 22, marginBottom: 6, flexWrap: "wrap" }}>
             {[["기간 매출", won(trendSum[0]) + "원"], ["기간 수익", won(trendSum[1]) + "원", profitColor(trendSum[1], { dark: true })], ["매익률", trendSum[0] ? `${((trendSum[1] / trendSum[0]) * 100).toFixed(1)}%` : "-", profitRateColor(trendSum[0] ? (trendSum[1] / trendSum[0]) * 100 : 0, { dark: true })], ["최고", `${peak.label} · ${short(peak.s)}`], ["건수", `${trendSum[2].toLocaleString()}건`]].map(([k, v, vc]) => (
@@ -397,7 +397,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 0, borderTop: `2px dashed ${C.hi}` }} />수익</span>
             </div>
           </div>
-          <div style={{ height: "clamp(260px, 34vh, 400px)" }}>
+          <div style={{ height: compact ? 210 : "clamp(260px, 34vh, 400px)" }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={trend} margin={{ top: 10, right: 6, left: 0, bottom: 0 }}>
                 <defs>
@@ -445,7 +445,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       </div>
 
       {/* ── 담당자 순위 + 거래처 Top ── */}
-      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr)", gap: 14 }}>
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: compact ? "minmax(0,1fr)" : "minmax(0,1.6fr) minmax(0,1fr)", gap: 14 }}>
         <Panel code="RANKING" title={`${Number(thisMonth.slice(5))}월 담당자별 매출 순위`} right={<Seg value={rankBy} onChange={setRankBy} items={[["sale", "매출"], ["profit", "수익"], ["cnt", "건수"]]} />}>
           {staffRank.length === 0 ? (
             <div style={{ padding: "40px 0", textAlign: "center", fontSize: 14, color: C.dim }}>{ready ? "이번 달 실적이 아직 없습니다" : "계산 중…"}</div>
@@ -455,15 +455,15 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
                 const v = metric(g);
                 const share = staffTotal ? (g.s / staffTotal) * 100 : 0;
                 return (
-                  <div key={g.name} style={{ display: "grid", gridTemplateColumns: "34px minmax(90px,1.1fr) minmax(0,2fr) 104px 92px 64px", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 12, background: i === 0 ? "linear-gradient(90deg,rgba(110,149,232,.22),rgba(110,149,232,.04))" : "rgba(255,255,255,.025)", border: `1px solid ${i === 0 ? "rgba(143,176,240,.35)" : C.line}` }}>
+                  <div key={g.name} style={{ display: "grid", gridTemplateColumns: compact ? "28px minmax(0,1.2fr) minmax(0,1fr) 64px" : "34px minmax(90px,1.1fr) minmax(0,2fr) 104px 92px 64px", alignItems: "center", gap: compact ? 8 : 10, padding: "8px 10px", borderRadius: 12, background: i === 0 ? "linear-gradient(90deg,rgba(110,149,232,.22),rgba(110,149,232,.04))" : "rgba(255,255,255,.025)", border: `1px solid ${i === 0 ? "rgba(143,176,240,.35)" : C.line}` }}>
                     <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 800, textAlign: "center", color: i < 3 ? "#fff" : C.dim, background: i < 3 ? `rgba(110,149,232,${0.45 - i * 0.12})` : "transparent", borderRadius: 8, padding: "3px 0" }}>{String(i + 1).padStart(2, "0")}</span>
                     <span style={{ fontSize: 15, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</span>
                     <div style={{ height: 8, borderRadius: 99, background: "rgba(143,176,240,.1)", overflow: "hidden" }}>
                       <div style={{ height: "100%", width: `${Math.max(2, (v / staffMax) * 100)}%`, borderRadius: 99, background: i === 0 ? `linear-gradient(90deg,#4B6CB7,${C.hi})` : "linear-gradient(90deg,#2D4C82,#6E95E8)" }} />
                     </div>
                     <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: (rankBy === "profit" && profitColor(v, { dark: true })) || "#fff", textAlign: "right" }}>{rankBy === "cnt" ? `${g.c}건` : short(v)}</span>
-                    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 700, color: C.sub, textAlign: "right" }}>{g.c}건 · {g.s ? ((g.p / g.s) * 100).toFixed(1) : "0.0"}%</span>
-                    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 700, color: C.dim, textAlign: "right" }}>{share.toFixed(1)}%</span>
+                    {!compact && <><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 700, color: C.sub, textAlign: "right" }}>{g.c}건 · {g.s ? ((g.p / g.s) * 100).toFixed(1) : "0.0"}%</span>
+                    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 700, color: C.dim, textAlign: "right" }}>{share.toFixed(1)}%</span></>}
                   </div>
                 );
               })}
@@ -521,7 +521,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       </div>
 
       {/* ── 운영 현황(2026-10-28 추가) — 오늘·내일 배차판 / 상차 시간대 / 차종 / 주요 노선 / 요일 패턴 ── */}
-      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, marginTop: 14 }}>
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: compact ? "minmax(0,1fr)" : "minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, marginTop: 14 }}>
         <Panel code="BOARD" title={L.board}>
           {[["오늘", today, ops.today], ["내일", tomorrow, ops.tomorrow]].map(([k, dd, o]) => (
             <div key={k} style={{ marginBottom: 12 }}>
