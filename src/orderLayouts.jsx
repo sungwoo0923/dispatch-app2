@@ -338,6 +338,13 @@ ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate
 .of-lay-k .kp-date-row > [data-of="pq"]{--a:pq;justify-self:end;align-self:center}.of-lay-k .kp-date-row > [data-of="dq"]{--a:dq;justify-self:end;align-self:center}
 .of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="dtime"]{zoom:.86}
 .of-lay-k .kp-order-form > [data-of="opt"] button{white-space:nowrap!important}
+.of-lay-k [data-k-farehint]{display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:3px 10px!important;width:100%;box-sizing:border-box;padding:9px 12px!important;border-radius:12px!important;margin-top:10px!important}
+.of-lay-k [data-k-farehint]>*{min-width:0;margin:0!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.of-lay-k [data-k-farehint]>[data-fh="route"]{grid-column:1;grid-row:1;font-size:13px}
+.of-lay-k [data-k-farehint]>[data-fh="range"]{grid-column:2;grid-row:1;font-size:13.5px;text-align:right}
+.of-lay-k [data-k-farehint]>[data-fh="basis"]{grid-column:1;grid-row:2;font-size:11.5px!important}
+.of-lay-k [data-k-farehint]>[data-fh="btn"]{grid-column:2;grid-row:2;justify-self:end}
+.of-lay-k [data-k-farehint]>[data-fh="tmap"]{grid-column:1 / -1;grid-row:3;border:0!important;padding:0!important;font-size:11px!important}
 .of-lay-k .kp-order-form > [data-of="opt"] [role=group] button{padding-left:10px!important;padding-right:10px!important}
 .of-lay-k .kp-date-row > [data-of="sw"]{--a:sw;align-self:center;justify-self:center}
 .of-lay-k .kp-date-row > [data-k-hide]{display:none!important}
