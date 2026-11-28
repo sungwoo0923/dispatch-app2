@@ -653,7 +653,7 @@ function DmDot({ on, alert = false }) {
   const [kOptEl, setKOptEl] = React.useState(null); // 운행 옵션 묶음을 K 카드 안으로(포털)
   // 🔍 2026-11-27 사용자 요청 — 브라우저를 확대 · 축소해도 오더등록 전체 구도가 그대로(글씨 · 칸 · 달력이 같이 커지고 작아짐)
   //  설계 폭(K_W)으로 그린 뒤 화면 폭에 맞춰 통째로 배율(zoom) — 글씨는 다시 그려져 흐려지지 않는다
-  const K_W = 1440;
+  const K_W = 1280; // 🗺 2026-11-28 지도를 크게 — 입력창 설계 폭을 줄여(글씨 크기는 그대로) 남는 폭을 지도에
   const kFitRef = React.useRef(null);
   const [kScale, setKScale] = React.useState(1);
   const [kW, setKW] = React.useState(K_W);
@@ -664,24 +664,24 @@ function DmDot({ on, alert = false }) {
     const inner = el.firstElementChild;
     // 폭에 맞춘 배율과, 화면 높이에 오더등록 전체가 들어오는 배율 중 작은 쪽 — 단, 글씨가 너무 작아지지 않게 0.9 아래로는 줄이지 않는다
     const fit = () => {
-      const w = el.clientWidth; if (!(w > 0)) return;
+      // 🗺 2026-11-28 사용자 요청 — 입력창은 왼쪽 메뉴에 딱 붙이고(가운데 정렬 X) 남는 폭은 전부 지도에
+      const row = el.closest(".of-skin-k"); const total = row ? row.clientWidth : el.clientWidth; if (!(total > 0)) return;
       const cur = parseFloat(getComputedStyle(inner).zoom) || 1;
       const designH = inner.getBoundingClientRect().height / cur;
       const scroller = el.closest("main");
       const top = el.getBoundingClientRect().top + (scroller ? scroller.scrollTop : window.scrollY);
       const availH = window.innerHeight - top - 14;
-      const byW = w / K_W;
+      const byW = (total - 560 - 16) / K_W; // 지도는 최소 560px
       const byH = designH > 0 && availH > 200 ? availH / designH : byW;
-      // 폭은 절대 넘치지 않게(오른쪽 지도 밑으로 들어가지 않게) · 높이 맞춤은 글씨가 너무 작아지지 않게 0.8 까지만
-      const next = Math.max(0.6, Math.min(2, Math.round(Math.min(byW, Math.max(0.8, byH)) * 1000) / 1000));
-      const nextW = Math.round(Math.min(K_W * 1.3, Math.max(K_W, w / next)));
+      const next = Math.max(0.6, Math.min(1.6, Math.round(Math.min(byW, Math.max(0.8, byH)) * 1000) / 1000));
       setKScale((v) => (Math.abs(v - next) > 0.005 ? next : v));
-      setKW((v) => (Math.abs(v - nextW) > 4 ? nextW : v));
+      setKW(K_W);
       const ph = Math.max(560, Math.round(availH));
       setKPanelH((v) => (Math.abs(v - ph) > 4 ? ph : v));
     };
     fit(); const t = setTimeout(fit, 400);
     const ro = new ResizeObserver(fit); ro.observe(el);
+    const rowEl = el.closest(".of-skin-k"); if (rowEl) ro.observe(rowEl); // 왼쪽 메뉴 접기 등으로 전체 폭이 바뀌어도
     window.addEventListener("resize", fit);
     return () => { clearTimeout(t); ro.disconnect(); window.removeEventListener("resize", fit); };
   }, [kOn]);
@@ -9483,10 +9483,10 @@ className={`
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
   {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
-  <div data-kp-order-form="1" className={kOn ? "flex-1 min-w-0" : "basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]"} style={{ flexGrow: kOn ? 1 : 0, flexShrink: kOn ? 1 : 0, minWidth: 0, overflow: kOn ? "visible" : "hidden" }}>
+  <div data-kp-order-form="1" className={kOn ? "min-w-0" : "basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]"} style={kOn ? { flex: "none", width: Math.round(K_W * kScale), minWidth: 0, overflow: "visible" } : { flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
     {kOn ? (
       <div ref={kFitRef} className="w-full min-w-0">
-        <div className="of-k-fit" style={{ width: kW, zoom: kScale, marginInline: "auto" }}>{renderForm()}</div>
+        <div className="of-k-fit" style={{ width: kW, zoom: kScale }}>{renderForm()}</div>
       </div>
     ) : renderForm()}
   </div>
@@ -9498,7 +9498,7 @@ className={`
       이 패널은 원래대로 단일 상/하차일 선택 전용으로 유지한다. */}
   {kOn ? (
     // 🗺 시안 L — 오른쪽에 늘 떠 있는 실시간 경로 지도(상 · 하차 주소가 들어오면 경로 · 거리 · 시간 · 유류비 · 통행료)
-    <div className="shrink-0 self-start sticky top-0" style={{ width: "30%", minWidth: 400, maxWidth: 620 }}>
+    <div className="flex-1 min-w-[560px] self-start sticky top-0">
       <OrderRouteMapPanel form={form} height={kPanelH} onOpenBig={() => setShowFareRouteMap(true)} />
     </div>
   ) : skinOn === "route" ? (

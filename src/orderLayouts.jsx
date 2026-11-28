@@ -325,7 +325,7 @@ ${area("deck", [...ALL.filter((n) => n !== "md"), "closeym"])}
 /* ═══════ K 카드형(사용자 확정 2026-11-27) — 24칸 + 달력 칸 · 카드 바탕 · 카드 제목 · 박스형 입력칸 ═══════ */
 .of-skin-k{display:flex!important;align-items:flex-start!important;gap:16px!important}
 .of-skin-k .kp-order-card{border:0!important;box-shadow:none!important;background:transparent!important;overflow:visible!important}
-${A("k")}{grid-template-columns:repeat(24,minmax(0,1fr)) 340px!important;column-gap:24px!important;row-gap:8px!important;grid-template-rows:auto 6px repeat(4,auto) 6px repeat(4,auto) 6px repeat(3,auto) auto!important;grid-auto-rows:auto;background:#F8FAFD!important;border:1px solid #E1E7F0!important;border-radius:18px!important;padding:14px 22px 18px!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 18px 40px rgba(16,24,40,.07)!important;overflow:visible!important}
+${A("k")}{grid-template-columns:repeat(24,minmax(0,1fr)) 300px!important;column-gap:18px!important;row-gap:8px!important;grid-template-rows:auto 6px repeat(4,auto) 6px repeat(4,auto) 6px repeat(3,auto) auto!important;grid-auto-rows:auto;background:#F8FAFD!important;border:1px solid #E1E7F0!important;border-radius:18px!important;padding:14px 22px 18px!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 18px 40px rgba(16,24,40,.07)!important;overflow:visible!important}
 .of-lay-k .kp-order-form > [data-of] label{margin-bottom:3px!important}
 .of-lay-k .kp-order-form input:not([type=checkbox]):not([type=radio]){min-height:34px!important;height:34px!important}
 .of-lay-k .kp-order-form textarea{min-height:64px!important}
@@ -336,7 +336,9 @@ ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate
 .of-lay-k .kp-date-row > [data-of="pdate"]{--a:pdate}.of-lay-k .kp-date-row > [data-of="ptime"]{--a:ptime}
 .of-lay-k .kp-date-row > [data-of="ddate"]{--a:ddate}.of-lay-k .kp-date-row > [data-of="dtime"]{--a:dtime}
 .of-lay-k .kp-date-row > [data-of="pq"]{--a:pq;justify-self:end;align-self:center}.of-lay-k .kp-date-row > [data-of="dq"]{--a:dq;justify-self:end;align-self:center}
-.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="dtime"]{zoom:.92}
+.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="dtime"]{zoom:.86}
+.of-lay-k .kp-order-form > [data-of="opt"] button{white-space:nowrap!important}
+.of-lay-k .kp-order-form > [data-of="opt"] [role=group] button{padding-left:10px!important;padding-right:10px!important}
 .of-lay-k .kp-date-row > [data-of="sw"]{--a:sw;align-self:center;justify-self:center}
 .of-lay-k .kp-date-row > [data-k-hide]{display:none!important}
 .of-lay-k .kp-date-row > [data-of="pdate"],.of-lay-k .kp-date-row > [data-of="ptime"],.of-lay-k .kp-date-row > [data-of="ddate"],.of-lay-k .kp-date-row > [data-of="dtime"]{padding-top:24px;display:flex;align-items:center;gap:6px}
@@ -350,7 +352,7 @@ ${area("k", [...ALL.filter((n) => n !== "md" && n !== "head"), "closeym", "pdate
 .of-lay-k [data-of="sw"] [data-testid="swap-route"] > span.w-px{display:none}
 .of-lay-k [data-of="sw"] [data-testid="swap-route"] > button:first-child{flex-direction:column;padding:4px 6px!important;text-align:center;line-height:1.3;white-space:normal;word-break:keep-all;width:64px}
 /* 카드 바탕 · 제목 */
-.of-lay-k .of-k-card{position:relative;border-radius:16px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.04),inset 0 0 0 1px #E4E9F2;margin:-10px -9px -10px}
+.of-lay-k .of-k-card{position:relative;border-radius:16px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.04),inset 0 0 0 1px #E4E9F2;margin:-10px -7px -10px}
 .of-lay-k .of-k-card-p{grid-row:hp-start/pm-end;grid-column:hp-start/pq-end}
 .of-lay-k .of-k-card-d{grid-row:hd-start/dm-end;grid-column:hd-start/dq-end}
 .of-lay-k .of-k-card-c{grid-row:hc-start/ton-end;grid-column:hc-start/hc-end}
