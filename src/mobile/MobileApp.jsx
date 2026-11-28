@@ -92,6 +92,8 @@ const onceSnapM = (q, cb) => {
 // 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
 import { runMobileBack } from "../mobileBack"; // 🔙 2026-11-10 덮어 뜬 창 뒤로가기로 닫기
 const MobilePcView = React.lazy(() => import("./MobilePcViews"));
+const MobileDispatchHome = React.lazy(() => import("./MobileDispatchHome")); // 📱 2026-11-28 운송 홈(PC 운송 HOME 휴대폰판)
+import MobileBottomNav, { NAV_ITEMS, resolveNav, RegisterPickSheet, NavEditSheet } from "./MobileBottomNav"; // 📱 2026-11-28 하단 메뉴바
 const FreightMobile = React.lazy(() => import("../freight/FreightMobile"));
 import { useMobileAlerts } from "./mobileAlerts";
 import { useRouteBoardIds } from "../routeBoardIds"; // ⭐ 2026-11-05 고정노선 미배차 메뉴 숫자
@@ -191,7 +193,7 @@ import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 �
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 const AiAssistant = lazyView(() => import("../AiAssistant"), null); // 🤖 2026-11-07 AI 비서
-import { useBetaOn, DispatchWayPicker } from "../CallPay"; // ⭐ 2026-11-11 시험 기능(테스트운송사)
+import { DispatchWayPicker } from "../CallPay";
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로)
 import MyInfoTabs from "../MyInfoTabs"; // ⭐ 2026-11-07 내정보 안 탭(급여명세서 · 연차 사용 계획)
@@ -2286,7 +2288,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const bizM = bizWantM === "group" ? (canBizGroupM ? "group" : bizListM[0]) : (bizListM.includes(bizWantM) ? bizWantM : bizListM[0]);
   const pickBizM = (k) => { setBizRawM(k); writeBiz(user?.uid, k); setBizHandoffM(false); setShowMenu(false); };
   const bizOverlayM = bizModsAllM.loaded && (bizM !== "inland" || bizHandoffM) ? (bizM !== "inland" ? bizM : "inland") : "";
-  const [page, setPage] = useState(deptMode ? "dept" : "list");
+  const [page, setPage] = useState(deptMode ? "dept" : "home"); // 📱 2026-11-28 운송은 운송 홈에서 시작(하단 메뉴바 [홈])
   // 🧪 개발 전용 — 화면 점검 스크립트가 페이지를 바꿀 수 있게(배포 빌드에는 빠진다)
   if (import.meta.env.DEV) { try { window.__kpSetPage = setPage; } catch { /* 무시 */ } }
   // 📍 2026-11-13 지금 보는 화면(관리센터 실시간 표시)
@@ -2309,7 +2311,8 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   }, [page]);
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
-    if (deptMode && page === "list" && !((deptMode === "acct" || deptMode === "sales") && deptListOkRef.current)) setPage("dept"); // 💼 영업도 메뉴의 [배차현황]으로 오더 목록 조회
+    if (deptMode && page === "list" && !((deptMode === "acct" || deptMode === "sales") && deptListOkRef.current)) setPage("dept");
+    if (deptMode && page === "home") setPage("dept"); // 📱 2026-11-28 부서 화면의 홈은 부서 홈 // 💼 영업도 메뉴의 [배차현황]으로 오더 목록 조회
     if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:settle" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:safety" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:routefare" && page !== "dept:myresume" && !["dept:payslip", "dept:leaveplan", "dept:payroll", "dept:leavepromo"].includes(page) && !(page === "dept:briefing" && canBriefingM) /* ⭐ 2026-11-06 급여·연차 촉진(화면이 권한 확인) */ && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFullV(v); setPage(v && (!execAllMgrM || roleView.view === "dispatch") ? "list" : "dept"); };
@@ -2439,18 +2442,22 @@ useEffect(() => {
       backPressCountRef.current = 0;
       return;
     }
-    if (pageRef.current !== "list") {
-      setPage("list");
+    // 📱 2026-11-28 홈(운송 홈 · 부서 홈)이 맨 처음 화면 — 다른 화면은 목록 → 홈 순서로 돌아가고, 홈에서 두 번 누르면 종료
+    const rootPage = pageRef.current === "home" || pageRef.current === "dept";
+    if (!rootPage) {
+      setPage(pageRef.current === "list" ? "home" : "list"); // 부서 화면은 list → dept 로 바로 넘어간다(위 효과)
       window.history.pushState(null, '', window.location.href);
       backPressCountRef.current = 0;
     } else {
       backPressCountRef.current += 1;
 
       if (backPressCountRef.current === 1) {
-        setToast("한 번 더 누르면 앱이 종료됩니다");
+        // 📱 2026-11-28 안내는 2초 뒤 저절로 사라진다(예전엔 닫을 때까지 남아 하단 메뉴를 가렸다)
+        setToast("한 번 더 누르면 앱이 종료돼요");
         if (backPressTimerRef.current) clearTimeout(backPressTimerRef.current);
         backPressTimerRef.current = setTimeout(() => {
           backPressCountRef.current = 0;
+          setToast((t) => (t === "한 번 더 누르면 앱이 종료돼요" ? "" : t));
           window.history.pushState(null, '', window.location.href);
         }, 2000);
       }
@@ -3748,7 +3755,8 @@ useEffect(() => {
   const lastNear = nearPickupAlertRef.current;
   if (lastNear.key === key && Date.now() - lastNear.at < 10 * 60 * 1000) return;
   nearPickupAlertRef.current = { key, at: Date.now() };
-  setToast(`상차 2시간 이내 미배차 ${nearOrders.length}건 · 확인해 주세요`);
+  // 📱 2026-11-28 아래쪽 검은 알림("상차 2시간 이내 미배차 N건")은 없앴다 — 저절로 안 꺼지고 하단 메뉴바를 가렸다.
+  //  위쪽 빨간 미배차 임박 알림(상차 30분 전) · 운송 홈 [오늘 할 일] · 하단 [배차현황] 숫자로 알 수 있다. 진동만 한 번.
   navigator.vibrate?.(200);
 }
   };
@@ -5759,6 +5767,7 @@ const title =
   : page === "fixedroute" ? "고정노선현황"
   : page === "monthclose" ? "월 마감"
   : page === "perms" ? "권한 관리"
+  : page === "home" ? "운송 홈"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "office" ? "사내업무" : deptMode === "hr" ? "인사관리" : deptMode === "sales" ? "영업" : "경리·회계")
   : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 제출 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:pfvault": "비공개 운임", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:safety": "안전교육", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:routefare": "노선 특수운임", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
   : page === "status" ? "배차현황"
@@ -5814,15 +5823,102 @@ const title =
       return "opened";
     },
   };
-  // ⭐ 2026-11-11 + 버튼에 AI 비서 합치기(시험 기능 — 테스트운송사) · 목록 화면에서만 합치고, 다른 화면은 AI 비서 버튼 그대로
-  const fabMergeOn = useBetaOn(userCompany);
   const [aiOpenM, setAiOpenM] = useState(false);
-  const [fabMenu, setFabMenu] = useState(false);
-  const fabGoRef = useRef(false);
-  const fabPlusRef = useRef(null);
-  const fabMerged = fabMergeOn && page === "list" && !showMenu && !multiSelectMode;
-  useEffect(() => { if (!fabMerged) setFabMenu(false); }, [fabMerged]);
   const aiGoMenuM = (m) => setPage({ 배차관리: "form", 매출관리: "sales", 지입차관리: "fleet", HOME: "list" }[m] || "list");
+
+  // ------------------------------------------------------------------
+  // 📱 2026-11-28 하단 메뉴바(src/mobile/MobileBottomNav.jsx) — 홈 / 두 번째 칸(바꿀 수 있음) / 가운데(팀 핵심 · 고정) / 전자결재 / 설정
+  //  두 번째 칸은 계정마다 저장(users/{uid}.mobileNav.{화면}) · 고를 수 있는 메뉴는 이 사람이 지금 열 수 있는 것만(옆 메뉴와 같은 권한 확인)
+  // ------------------------------------------------------------------
+  const navModeM = deptMode || (role === "viewer" ? "viewer" : "dispatch");
+  const homePageM = deptMode ? "dept" : "home";
+  const isCeoNavM = forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim());
+  const navCan = (k) => {
+    switch (k) {
+      case "register": return role !== "viewer" && role !== "test" && menuOkM("배차관리");
+      case "list": case "fixedroute": return menuOkM("배차현황");
+      case "unassigned": return menuOkM("배차관리");
+      case "monthclose": return menuOkM("배차현황") && role !== "viewer";
+      case "fare": return menuOkM("운임조회");
+      case "ratecard": return role !== "test" && menuOkM("단가표");
+      case "drivers": return PC_DRIVER_MENU_ROLES.has(role) && menuOkM("기사관리");
+      case "fleet": return menuOkM("지입차관리");
+      case "clients": return PC_CLIENT_MENU_ROLES.has(role) && menuOkM("거래처관리");
+      case "settle": return menuOkM("정산관리");
+      case "sales": return menuOkM("매출관리");
+      case "acct": return menuOkM("회계관리");
+      case "cashbook": return menuOkM("자금관리");
+      case "assets": return menuOkM("비품관리");
+      case "hr": return menuOkM("인사관리부");
+      case "cert": return menuOkM("증명서발급");
+      case "attendance": return deptMode === "hr";
+      case "salesMgmt": return deptMode === "exec" || menuOkM("영업관리");
+      case "briefing": return canBriefingM;
+      case "analysis": case "apqueue": case "staffinfo": case "execsched": return deptMode === "exec" || k === "execsched";
+      case "funds": return deptMode === "exec" && isCeoNavM;
+      case "approval": return menuOkM("전자결재");
+      default: return true; // 공지사항 · 직원 일정 · 게시판 · 사내 규정 · 안전교육(모든 직원 메뉴)
+    }
+  };
+  const navResolvedM = resolveNav(navModeM, navCan, myProfM?.mobileNav?.[navModeM]);
+  const [navEditM, setNavEditM] = useState(false);
+  const [regPickM, setRegPickM] = useState(false);
+  const [formAutoAgent, setFormAutoAgent] = useState(false);
+  const openNewOrderM = (agent) => {
+    setRegPickM(false);
+    setForm({
+      거래처명: "", 담당노선구분: rgNewDefault, 상차일: todayKST(), 상차시간: "", 하차일: todayKST(), 하차시간: "",
+      상차지명: "", 상차지주소: "", 하차지명: "", 하차지주소: "", 톤수: "", 차종: "", 화물내용: "", 상차방법: "", 하차방법: "",
+      지급방식: "", 배차방식: "", 청구운임: 0, 기사운임: 0, 수수료: 0, 산재보험료: 0, 차량번호: "", 기사명: "", 전화번호: "",
+      혼적여부: "독차", 긴급: false, 운행유형: "", 적요: "", _editId: null, _returnToDetail: false,
+    });
+    setSelectedOrder(null);
+    setPrevPage(page === "form" ? "list" : page);
+    setFormAutoAgent(!!agent);
+    setPage("form");
+    window.scrollTo(0, 0);
+  };
+  const NAV_PAGE = { list: "list", unassigned: "unassigned", fixedroute: "fixedroute", monthclose: "monthclose", fare: "national-fare", ratecard: "ratecard", drivers: "drivers", fleet: "fleet", clients: "clients", notice: "notice", schedule: "dept:schedule", board: "dept:board", settle: "dept:settle", sales: "sales", acct: "dept:acct", cashbook: "dept:cashbook", assets: "dept:assets", hr: "dept:hr", attendance: "attendance", cert: "dept:cert", rules: "dept:rules", safety: "dept:safety", salesMgmt: "dept:sales", briefing: "dept:briefing", analysis: "dept:analysis", apqueue: "dept:apqueue", staffinfo: "dept:staffinfo", funds: "dept:funds", execsched: "dept:execsched", approval: "approval", settings: "settings" };
+  const navGo = (k) => {
+    setShowMenu(false);
+    if (k === "home") { setPage(homePageM); window.scrollTo(0, 0); return; }
+    if (k === "register") { setRegPickM(true); return; }
+    if (k === "list") deptListOkRef.current = true;
+    if (k === "unassigned") setUnassignedTypeFilter("전체");
+    if (k === "notice" && currentUser?.uid) {
+      const now = Math.floor(Date.now() / 1000);
+      setDoc(doc(db, "userSettings", currentUser.uid), { lastReadNoticeAt: now }, { merge: true }).catch(() => {});
+      setUserReadNoticeAt(now); setHasNewNotice(false);
+    }
+    const target = NAV_PAGE[k] || "list";
+    if (page === target) { window.scrollTo({ top: 0, behavior: "smooth" }); return; } // 지금 보고 있는 칸을 또 누르면 맨 위로
+    setPage(target);
+    window.scrollTo(0, 0);
+  };
+  const navBadgeM = (k) => ({
+    list: dispatchAlertsOnM ? (drvCounts.orders || 0) + unseenListOrders.length : 0,
+    unassigned: dispatchAlertsOnM ? unseenUnassignedOrders.length : 0,
+    approval: (alertCounts.approval || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (payTodoM || 0),
+    notice: alertCounts.notice || 0,
+    settle: closeInboxM?.count || 0,
+  }[k] || 0);
+  const navActiveM = (k) => k === "home" ? page === homePageM : page === NAV_PAGE[k];
+  const navSlotKeysM = ["home", navResolvedM.slot2, navResolvedM.center, navCan("approval") ? "approval" : (navResolvedM.slot2 === "notice" ? "schedule" : "notice"), "settings"];
+  const navItemsM = navSlotKeysM.map((k, i) => ({ key: k, label: NAV_ITEMS[k]?.label || k, icon: NAV_ITEMS[k]?.icon || "list", center: i === 2, active: navActiveM(k), badge: navBadgeM(k), onClick: () => navGo(k) }));
+  const navShownM = page !== "form" && !multiSelectMode && !showMobileMessenger && !showMenu;
+  const saveNavM = async (k) => {
+    const uid = user?.uid || currentUser?.uid;
+    if (!uid) return;
+    try {
+      await updateDoc(doc(db, "users", uid), { [`mobileNav.${navModeM}`]: k });
+      setNavEditM(false);
+      showToast(`두 번째 칸을 [${NAV_ITEMS[k]?.label || k}]로 바꿨어요`);
+    } catch (e) {
+      console.warn("하단 메뉴 저장 실패:", e);
+      showToast("저장하지 못했어요. 잠시 뒤 다시 해 주세요");
+    }
+  };
+  const navRootZoomM = (() => { try { const z = parseFloat(document.getElementById("root")?.style.zoom || "1"); return z > 0 ? z : 1; } catch { return 1; } })();
 
   // ------------------------------------------------------------------
   // 렌더링
@@ -5946,8 +6042,8 @@ const title =
   // ⚠️ z-50이던 시절엔 다른 화면 요소(하단 액션바 등)가 같은 z-50으로 뒤에 그려지는
   // 순서상 토스트를 덮어버려 안 보이는 경우가 있었다. 다른 팝업들처럼 확실히
   // 최상단(z-[999999])에 뜨도록 올리고, 하단 네비/버튼 위로 자리도 더 띄운다.
-  <div className="kp-m-toast fixed bottom-20 left-1/2 -translate-x-1/2 z-[999999]
-                  bg-black text-white px-4 py-3 rounded-xl shadow-lg
+  <div style={{ bottom: "calc(104px + env(safe-area-inset-bottom, 0px))" }} /* 📱 2026-11-28 하단 메뉴바 위 */ className="kp-m-toast fixed left-1/2 -translate-x-1/2 z-[999999]
+                  bg-[#0F1A30]/95 text-white px-4 py-3 rounded-2xl shadow-[0_10px_24px_rgba(11,20,40,0.3)]
                   flex items-center gap-3 max-w-[95vw]">
     {/* 분할화면 등 화면 폭이 좁아져도 메시지가 3줄로 꺾여 보이지 않도록
         한 줄 유지, 정말 폭보다 길 때만 잘라서 스크롤 없이 보여준다 */}
@@ -6221,7 +6317,7 @@ const title =
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
   onValidateOrders={undefined /* ⭐ 2026-11-04 오더검증 버튼 없앰 */}
-  onMenu={page === "list" || page === "dept" ? () => setShowMenu(true) : undefined}
+  onMenu={page === "list" || page === "dept" || page === "home" ? () => setShowMenu(true) : undefined}
   menuBadge={(alertCounts.approval || 0) + (payTodoM || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + (dispatchAlertsOnM ? drvCounts.orders + drvCounts.sos + unseenDispatchTotal : 0) /* ⭐ 2026-11-17 배차 숫자는 운송 화면일 때만 */ + drvCounts.docs /* ⭐ 2026-11-05 기사앱 이벤트 · 2026-11-06 안 본 미배차·고정노선 미배차 */}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
@@ -6269,7 +6365,7 @@ const title =
 {!deptMode && page !== "form" && (
   <AiAssistant variant="mobile" dispatches={allOrders} clients={clients} places={places} drivers={drivers} company={userCompany || localStorage.getItem("userCompany") || ""}
     uid={user?.uid || ""} userName={myRealName || ""} screen={page} orderApi={aiOrderApiM} onNavigate={aiGoMenuM}
-    controlledOpen={aiOpenM} onOpenChange={setAiOpenM} hideLauncher={fabMerged || page === "detail" /* 🛠 2026-11-27 상세보기에선 ✦ 버튼이 [문자] · [기사 배차 취소]를 가려서 숨긴다(열려 있던 AI 창은 그대로) */} />
+    controlledOpen={aiOpenM} onOpenChange={setAiOpenM} hideLauncher={page === "detail" /* 🛠 2026-11-27 상세보기에선 ✦ 버튼이 [문자] · [기사 배차 취소]를 가려서 숨긴다(열려 있던 AI 창은 그대로) */} />
 )}
       {showMenu && (
         <MobileSideMenu
@@ -6427,7 +6523,7 @@ onGoAttendance={() => {
         />
       )}
 
-      <div className="flex-1 overflow-y-auto pb-24" style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }}>
+      <div className="flex-1 overflow-y-auto pb-24" style={{ paddingBottom: page === "form" ? undefined : "calc(112px + env(safe-area-inset-bottom, 0px))" /* 📱 2026-11-28 하단 메뉴바에 끝 내용이 가리지 않게 */, WebkitOverflowScrolling: "touch", scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }}>
         {page === "notice" && (
           <React.Suspense fallback={null}>
             <MobilePcView kind="notice" userCompany={pcViewCompany} me={pcViewMe} role={role} />
@@ -7129,7 +7225,7 @@ onGoAttendance={() => {
   </div>
 )}
 
-        {page === "list" && !(ordersLoaded && initLoadDone && bootDone) && (
+        {(page === "list" || page === "home") && !(ordersLoaded && initLoadDone && bootDone) && ( /* 📱 2026-11-28 운송 홈에서 시작해도 처음 받기 화면 */
           <MobileLoadingScreen
             loaded={(initLoadCounts.dispatch || 0) + (initLoadCounts.orders || 0)}
             total={initLoadTotal}
@@ -7145,6 +7241,14 @@ onGoAttendance={() => {
           />
         )}
 
+        {/* 📱 2026-11-28 운송 홈 — PC 운송 HOME(관제 데크)을 휴대폰 폭으로 */}
+        {page === "home" && ordersLoaded && initLoadDone && bootDone && (
+          <React.Suspense fallback={null}>
+            <MobileDispatchHome company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim()}
+              orders={allOrders} users={mobileUsers} myName={myRealName || currentUser?.displayName || ""} isMaster={role === "totalMaster"}
+              onTodoGo={(k) => { const [m, t] = String(k).split(":"); if (m === "배차현황" && t === "미배차현황") navGo("unassigned"); else navGo("list"); }} />
+          </React.Suspense>
+        )}
         {/* ⭐ 상세보기 중에도 목록을 화면 뒤에 그대로 두었다가(숨김) 뒤로가기 때 바로 보여준다 —
             예전엔 뒤로갈 때마다 목록 카드 수백 장을 새로 만들어 한 박자 늦게 나왔다 */}
         {(page === "list" || page === "detail") && ordersLoaded && initLoadDone && bootDone && (
@@ -7244,6 +7348,7 @@ setOpenMemo={setOpenMemo}
 )}
     {page === "form" && (
           <MobileOrderForm
+            autoAgent={formAutoAgent} onAutoAgentDone={() => setFormAutoAgent(false)}
             form={form}
             setForm={setForm}
             clients={formClientsList}
@@ -7347,6 +7452,7 @@ setOpenMemo={setOpenMemo}
         )}
         {page === "settings" && (
           <MobileSettingsPage
+            onEditNav={() => setNavEditM(true)} navSummary={navItemsM.map((it) => it.label).join(" · ")}
             deptMode={deptMode}
             canBriefing={canBriefingM}
             popupUid={user?.uid || ""}
@@ -7439,76 +7545,10 @@ setOpenMemo={setOpenMemo}
 
       </div>
 
-      {page === "list" && !showMenu && !multiSelectMode && (
-        <button
-          ref={fabPlusRef}
-          onClick={() => {
-            // ⭐ 2026-11-11 + 버튼에 AI 비서를 합친 화면(시험 기능) — 누르면 [AI 비서 · 오더등록] 메뉴, [오더등록]을 고르면 아래 원래 동작
-            if (fabMergeOn && !fabGoRef.current) { setFabMenu((v) => !v); return; }
-            fabGoRef.current = false; setFabMenu(false);
-            setForm({
-              거래처명: "", 담당노선구분: rgNewDefault, /* 🗂 2026-11-24 보고 있던 노선 탭 */
-              상차일: todayKST(),
-              상차시간: "",
-              하차일: todayKST(),
-              하차시간: "",
-              상차지명: "",
-              상차지주소: "",
-              하차지명: "",
-              하차지주소: "",
-              톤수: "",
-              차종: "",
-              화물내용: "",
-              상차방법: "",
-              하차방법: "",
-              지급방식: "",
-              배차방식: "",
-              청구운임: 0,
-              기사운임: 0,
-              수수료: 0,
-              산재보험료: 0,
-              차량번호: "",
-              기사명: "",
-              전화번호: "",
-              혼적여부: "독차",
-              긴급: false,
-              운행유형: "",
-              적요: "",
-              _editId: null,
-              _returnToDetail: false,
-            });
-            setSelectedOrder(null);
-            setPrevPage("list");
-            setPage("form");
-          }}
-          style={{ bottom: "calc(24px + env(safe-area-inset-bottom, 0px))" }} /* ⭐ 2026-11-08 AI 비서 버튼(위)과 같은 세로줄·간격 */
-          className={`fixed right-6 z-40 w-14 h-14 rounded-full text-white text-3xl flex items-center justify-center active:scale-95 transition-transform ${
-            cardVersionB
-              ? "bg-[#1B2B4B] shadow-[0_4px_20px_rgba(27,43,75,0.35)]"
-              : "bg-blue-500 shadow-lg"
-          }`}
-        >
-          <span style={{ display: "inline-block", transition: "transform .18s", transform: fabMergeOn && fabMenu ? "rotate(45deg)" : "none" }}>+</span>
-        </button>
-      )}
-      {fabMerged && fabMenu && (
-        <>
-          <div className="fixed inset-0 z-[39]" style={{ background: "rgba(11,20,40,0.28)" }} onClick={() => setFabMenu(false)} />
-          <div className="fixed right-6 z-40 flex flex-col items-end gap-2.5" style={{ bottom: "calc(92px + env(safe-area-inset-bottom, 0px))" }} data-fab-menu>
-            {[["AI 비서", () => { setFabMenu(false); setAiOpenM(true); }, "ai"], ["오더등록", () => { fabGoRef.current = true; fabPlusRef.current?.click(); }, "order"]].map(([label, fn, k]) => (
-              <button key={k} type="button" onClick={fn} data-fab-item={k}
-                className="h-12 pl-4 pr-5 rounded-full bg-white text-[#0F1A30] text-[15px] font-black shadow-[0_8px_24px_rgba(15,26,48,0.28)] border border-[#E3E8F0] flex items-center gap-2.5 active:scale-95 transition-transform whitespace-nowrap">
-                <span className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{ background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)" }}>
-                  {k === "ai"
-                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></svg>
-                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>}
-                </span>
-                {label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {/* 📱 2026-11-28 + 버튼(오른쪽 아래)은 없앴다 → 하단 메뉴바 가운데 [배차등록] · 하단 메뉴바는 스크롤과 상관없이 늘 화면 맨 아래 */}
+      <MobileBottomNav items={navItemsM} zoom={navRootZoomM} hidden={!navShownM} onLongPress={() => setNavEditM(true)} />
+      {regPickM && <RegisterPickSheet agentOk={!!(window.SpeechRecognition || window.webkitSpeechRecognition)} onClose={() => setRegPickM(false)} onManual={() => openNewOrderM(false)} onAgent={() => openNewOrderM(true)} />}
+      {navEditM && <NavEditSheet slots={navItemsM} choices={navResolvedM.choices} current={navResolvedM.slot2} defaultKey={resolveNav(navModeM, navCan, null).slot2} onSave={saveNavM} onClose={() => setNavEditM(false)} />}
       {/* ⭐⭐⭐ 글씨 크기 wrapper 닫힘 */}
   </div>
   </div>
@@ -14379,6 +14419,8 @@ function SmartOrderParser({ clients, drivers = [], onApply, onClose, cardVersion
 // 등록 폼
 // ======================================================================
 function MobileOrderForm({
+  autoAgent = false, // 📱 2026-11-28 하단 [배차등록] › [AI 통화로 등록]으로 들어오면 열자마자 AI 상담원 통화
+  onAutoAgentDone,
   onNeedHistory,
   historyLoading = 0,
   form,
@@ -15234,6 +15276,11 @@ const pickDrop = (c) => {
 
   // ===== 📞 2026-11-25 AI 상담원 음성 오더 — 말하고 [보내기] → AI가 칸 · 경유지 · 특수운임을 채우고, 읽어 준 뒤 "네"면 원래 저장(onSave) =====
   const [agentCall, setAgentCall] = useState(false);
+  React.useEffect(() => {
+    if (!autoAgent) return;
+    onAutoAgentDone?.();
+    if (!form._editId && (window.SpeechRecognition || window.webkitSpeechRecognition)) setAgentCall(true);
+  }, [autoAgent]); // eslint-disable-line react-hooks/exhaustive-deps
   const agentCompany = getTenant() || localStorage.getItem("userCompany") || "";
   const agentOptions = () => ({
     차종: withCustomVehicleTypes(VT_DEFAULTS, agentCompany),
@@ -21590,7 +21637,7 @@ return (
 );
 }
 
-function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, uiScale = 1, setUiScale, appVersion, showSuccess, onLogout, userCompany, role, deptMode = null, currentUser, refreshFromServer, canBriefing = false, popupUid = "" }) {
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, uiScale = 1, setUiScale, appVersion, showSuccess, onLogout, userCompany, role, deptMode = null, currentUser, refreshFromServer, canBriefing = false, popupUid = "", onEditNav = null, navSummary = "" }) {
   const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ★ 로그인 관리(기기 연결 끊기·비밀번호 변경)
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -21797,6 +21844,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
             right={<KpmScaleSeg uiScale={uiScale} setUiScale={setUiScale} />} />}
           <KpmRow label="글자 크기" sub="앱 전체 글자"
             right={<KpmSeg value={fontScale} options={[{ v: 1, l: "기본" }, { v: 1.1, l: "크게" }, { v: 1.2, l: "아주" }]} onPick={(v) => { setFontScale(v); localStorage.setItem("fontScale", String(v)); }} />} />
+          {/* 📱 2026-11-28 하단 메뉴바 — 두 번째 칸 바꾸기(하단 탭을 꾹 눌러도 같은 창) */}
+          {onEditNav && <KpmRow label="하단 메뉴" sub={navSummary || "두 번째 칸을 내가 자주 쓰는 메뉴로"} onClick={onEditNav} right={go("바꾸기")} />}
         </KpmCard>
 
         <KpmCard en="NOTIFICATION" title="알림" flush>
