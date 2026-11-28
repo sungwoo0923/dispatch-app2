@@ -404,7 +404,7 @@ const AI_FAB = 48; // 📱 2026-11-15 56 → 48(화면 내용을 덜 가리게)
 function MobileAiFab({ onOpen, children }) {
   const clamp = (p) => {
     const w = window.innerWidth; const h = window.innerHeight;
-    return { x: Math.min(Math.max(6, p.x), w - AI_FAB - 6), y: Math.min(Math.max(50, p.y), h - AI_FAB - 110) }; // 📱 2026-11-28 하단 메뉴바(약 90px) 위까지만
+    return { x: Math.min(Math.max(6, p.x), w - AI_FAB - 6), y: Math.min(Math.max(50, p.y), h - AI_FAB - 84) }; // 📱 2026-11-28 하단 메뉴바(약 64px) 위까지만
   };
   const [pos, setPos] = useState(() => {
     try { const v = JSON.parse(localStorage.getItem(AI_FAB_KEY) || "null"); if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) return clamp(v); } catch { /* 무시 */ }
@@ -444,7 +444,7 @@ function MobileAiFab({ onOpen, children }) {
     setPos(p);
     try { localStorage.setItem(AI_FAB_KEY, JSON.stringify(p)); } catch { /* 무시 */ }
   };
-  const place = pos ? { left: pos.x, top: pos.y } : { right: 18, bottom: "calc(108px + env(safe-area-inset-bottom, 0px))" } /* 📱 2026-11-28 하단 메뉴바 바로 위 오른쪽 */;
+  const place = pos ? { left: pos.x, top: pos.y } : { right: 18, bottom: "calc(82px + env(safe-area-inset-bottom, 0px))" } /* 📱 2026-11-28 하단 메뉴바 바로 위 오른쪽 */;
   return createPortal(
     <button type="button" data-testid="ai-fab" aria-label="AI 비서 (끌어서 옮기기)"
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { st.current = null; setDrag(false); }}
