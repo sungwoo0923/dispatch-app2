@@ -9650,6 +9650,7 @@ function MobileOrderList({
   };
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkEditOpen, setBulkEditOpen] = useState(false); // 🧰 2026-11-28 일괄수정
+  const mRootZoom = (() => { try { const z = parseFloat(document.getElementById("root")?.style.zoom || "1"); return z > 0 ? z : 1; } catch { return 1; } })(); // 글자 크기 배율
   // ── 오더필터 — 차종/배차방식/지급방식/청구·기사운임 누락 여부로 목록을 좁혀서 본다
   // (선택한 조건에 해당하는 것만 남기고 나머지는 안 보이게).
   const [orderTypeFilterOpen, setOrderTypeFilterOpen] = useState(false);
@@ -10560,13 +10561,13 @@ const summary = useMemo(() => {
       />
     )}
 
-    {/* ── 다중선택 하단 액션바 ── */}
-    <div
+    {/* ── 다중선택 하단 액션바 ── 🛠 2026-11-28 iOS: 글자 크기(#root zoom)를 쓰면 화면 가운데에 떠 보였다 → body 에 바로 붙이고 안쪽만 같은 배율 */}
+    {createPortal(<div
       className={`fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ${
         multiSelectMode ? "translate-y-0" : "translate-y-full"
       }`}
     >
-      <div className="bg-white border-t border-gray-200 shadow-[0_-4px_24px_rgba(0,0,0,0.10)] px-4 pt-3 pb-safe-bottom">
+      <div style={{ zoom: mRootZoom }}><div className="bg-white border-t border-gray-200 shadow-[0_-4px_24px_rgba(0,0,0,0.10)] px-4 pt-3 pb-safe-bottom">
         {/* 전체선택 + 건수 */}
         <div className="flex items-center justify-between mb-3">
           <button
@@ -10629,11 +10630,11 @@ const summary = useMemo(() => {
           </button>
         </div>
       </div>
-    </div>
+    </div></div>, document.body)}
 
-    {bulkEditOpen && selectedOrders.length > 0 && (
-      <MobileBulkEditSheet orders={selectedOrders} drivers={drivers || []} dispatcherName={dispatcherName} upsertDriver={upsertDriver} showToast={showToast}
-        onClose={() => setBulkEditOpen(false)} onDone={() => { setBulkEditOpen(false); exitMultiSelect(); }} />
+    {bulkEditOpen && selectedOrders.length > 0 && createPortal(
+      <MobileBulkEditSheet zoom={mRootZoom} orders={selectedOrders} drivers={drivers || []} dispatcherName={dispatcherName} upsertDriver={upsertDriver} showToast={showToast}
+        onClose={() => setBulkEditOpen(false)} onDone={() => { setBulkEditOpen(false); exitMultiSelect(); }} />, document.body
     )}
     {/* ── 업로드링크 발송 모달 ── */}
     {uploadLinkModal && (
@@ -11122,7 +11123,7 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
 //  저장은 한 건 수정(QuickEditModal)과 같은 규칙 — 운임 바뀌면 수수료 다시 · 기사 넣으면 배차완료(지입 기사앱은 승인대기 + 알림)
 //  · 지급방식 취소 → 배차취소 · 수정 이력 · 화주사 사본 · 고정노선 시트
 const M_HOURS = (() => { const a = []; for (let h = 1; h <= 12; h++) { a.push(`${h}시`); a.push(`${h}시 30분`); } return a; })();
-function MobileBulkEditSheet({ orders = [], drivers = [], dispatcherName = "", upsertDriver, showToast, onClose, onDone }) {
+function MobileBulkEditSheet({ orders = [], drivers = [], dispatcherName = "", upsertDriver, showToast, onClose, onDone, zoom = 1 }) {
   const [on, setOn] = useState({});
   const [v, setV] = useState({ 상차일: "", 하차일: "", 상차AP: "오전", 상차T: "", 상차기준: "", 하차AP: "오전", 하차T: "", 하차기준: "", 청구운임: "", 기사운임: "", 차량종류: "", 차량톤수: "", 지급방식: "", 배차방식: "", dispWay: {}, 차량번호: "", 이름: "", 전화번호: "", 업체전달상태: "전달완료", 메모: "", 전달사항: "" });
   const [saving, setSaving] = useState(false);
@@ -11230,7 +11231,7 @@ function MobileBulkEditSheet({ orders = [], drivers = [], dispatcherName = "", u
   return (
     <div className="fixed inset-0 z-[10050] flex flex-col justify-end" role="dialog" aria-label="일괄수정">
       <div className="absolute inset-0 bg-[#0B1428]/55" onClick={() => !saving && onClose?.()} />
-      <div className="relative bg-[#F4F6FA] rounded-t-[24px] max-h-[92vh] flex flex-col shadow-[0_-12px_40px_rgba(11,20,40,0.35)]">
+      <div className="relative bg-[#F4F6FA] rounded-t-[24px] flex flex-col shadow-[0_-12px_40px_rgba(11,20,40,0.35)]" style={{ zoom, maxHeight: `calc(92vh / ${zoom})` }}>
         <div className="px-5 pt-3 pb-3 rounded-t-[24px] text-white shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
           <div className="mx-auto w-10 h-1 rounded-full bg-white/30 mb-3" />
           <div className="flex items-center gap-3">
