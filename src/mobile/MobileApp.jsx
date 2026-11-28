@@ -9649,6 +9649,7 @@ function MobileOrderList({
     setAttachViewOrder(order);
   };
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkEditOpen, setBulkEditOpen] = useState(false); // 🧰 2026-11-28 일괄수정
   // ── 오더필터 — 차종/배차방식/지급방식/청구·기사운임 누락 여부로 목록을 좁혀서 본다
   // (선택한 조건에 해당하는 것만 남기고 나머지는 안 보이게).
   const [orderTypeFilterOpen, setOrderTypeFilterOpen] = useState(false);
@@ -10591,6 +10592,11 @@ const summary = useMemo(() => {
             {selectedIds.size === 0 ? "오더를 선택하세요" : <span className="font-bold text-[#1B2B4B]">{selectedIds.size}개 선택됨</span>}
           </span>
         </div>
+        {/* 🧰 2026-11-28 일괄수정 — 고른 오더에 같은 값을 한 번에 */}
+        <button type="button" onClick={() => setBulkEditOpen(true)} disabled={selectedIds.size === 0}
+          className="w-full mb-2 py-3 rounded-xl text-white text-[13.5px] font-black disabled:opacity-40 active:scale-[0.98] transition" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 55%,#2D4C82)" }}>
+          일괄수정{selectedIds.size > 0 ? ` · ${selectedIds.size}건` : ""}
+        </button>
         {/* 액션 버튼 */}
         <div className="flex gap-2 pb-1">
           <button
@@ -10625,6 +10631,10 @@ const summary = useMemo(() => {
       </div>
     </div>
 
+    {bulkEditOpen && selectedOrders.length > 0 && (
+      <MobileBulkEditSheet orders={selectedOrders} drivers={drivers || []} dispatcherName={dispatcherName} upsertDriver={upsertDriver} showToast={showToast}
+        onClose={() => setBulkEditOpen(false)} onDone={() => { setBulkEditOpen(false); exitMultiSelect(); }} />
+    )}
     {/* ── 업로드링크 발송 모달 ── */}
     {uploadLinkModal && (
       <UploadLinkModal
@@ -11107,6 +11117,170 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
 // ────────────────────────────────────────────────────────────────
 // 일부 수정 모달
 // ────────────────────────────────────────────────────────────────
+// 🧰 2026-11-28 사용자 요청 — 모바일 [다중선택] → [일괄수정]
+//  고른 오더 여러 건에 같은 값을 한 번에. 바꿀 칸만 켜고(나머지는 그대로) [N건 수정]
+//  저장은 한 건 수정(QuickEditModal)과 같은 규칙 — 운임 바뀌면 수수료 다시 · 기사 넣으면 배차완료(지입 기사앱은 승인대기 + 알림)
+//  · 지급방식 취소 → 배차취소 · 수정 이력 · 화주사 사본 · 고정노선 시트
+const M_HOURS = (() => { const a = []; for (let h = 1; h <= 12; h++) { a.push(`${h}시`); a.push(`${h}시 30분`); } return a; })();
+function MobileBulkEditSheet({ orders = [], drivers = [], dispatcherName = "", upsertDriver, showToast, onClose, onDone }) {
+  const [on, setOn] = useState({});
+  const [v, setV] = useState({ 상차일: "", 하차일: "", 상차AP: "오전", 상차T: "", 상차기준: "", 하차AP: "오전", 하차T: "", 하차기준: "", 청구운임: "", 기사운임: "", 차량종류: "", 차량톤수: "", 지급방식: "", 배차방식: "", dispWay: {}, 차량번호: "", 이름: "", 전화번호: "", 업체전달상태: "전달완료", 메모: "", 전달사항: "" });
+  const [saving, setSaving] = useState(false);
+  const set = (k, x) => setV((p) => ({ ...p, [k]: x }));
+  const tog = (k) => setOn((p) => ({ ...p, [k]: !p[k] }));
+  const nd = (x = "") => String(x).replace(/[-.\s]/g, "").toLowerCase();
+  const money = (x) => { const n = String(x).replace(/[^\d]/g, ""); return n ? Number(n).toLocaleString() : ""; };
+  const onCount = Object.values(on).filter(Boolean).length;
+  // 차량번호를 넣으면 등록된 기사 이름 · 전화를 채운다
+  const pickPlate = (plate) => {
+    set("차량번호", plate);
+    const d = (drivers || []).find((x) => nd(x.차량번호) === nd(plate));
+    if (d) setV((p) => ({ ...p, 차량번호: plate, 이름: d.이름 || d.기사명 || p.이름, 전화번호: d.전화번호 || p.전화번호 }));
+  };
+  const cls = "w-full h-11 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[15px] text-[#0F1A30] outline-none focus:border-[#1B2B4B]";
+  const Row = ({ k, label, children, hint }) => (
+    <div className={`rounded-2xl border transition ${on[k] ? "border-[#1B2B4B] bg-white shadow-[0_4px_14px_rgba(15,26,48,0.08)]" : "border-[#E3E8F0] bg-[#F8FAFD]"}`}>
+      <button type="button" onClick={() => tog(k)} className="w-full flex items-center gap-3 px-4 py-3 text-left">
+        <span className={`w-5 h-5 rounded-md border-2 grid place-items-center shrink-0 ${on[k] ? "bg-[#1B2B4B] border-[#1B2B4B]" : "border-[#AEBBD0] bg-white"}`}>
+          {on[k] && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+        </span>
+        <span className="flex-1 min-w-0"><span className="block text-[14.5px] font-extrabold text-[#0F1A30]">{label}</span>{hint && <span className="block text-[11.5px] text-[#5E6B82] font-bold mt-0.5">{hint}</span>}</span>
+        <span className={`text-[12px] font-extrabold ${on[k] ? "text-[#1B2B4B]" : "text-[#8A97AD]"}`}>{on[k] ? "바꿔요" : "그대로"}</span>
+      </button>
+      {on[k] && <div className="px-4 pb-4 -mt-1">{children}</div>}
+    </div>
+  );
+  const TimeBox = ({ p }) => (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        {["오전", "오후"].map((ap) => <button key={ap} type="button" onClick={() => set(`${p}AP`, ap)} className={`flex-1 h-10 rounded-xl text-[14px] font-extrabold border ${v[`${p}AP`] === ap ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{ap}</button>)}
+        <select value={v[`${p}T`]} onChange={(e) => set(`${p}T`, e.target.value)} className={`${cls} flex-[2]`}>
+          <option value="">시간 선택</option>{M_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+        </select>
+      </div>
+      <div className="flex gap-2">
+        {[["", "정각"], ["이전", "이전"], ["이후", "이후"]].map(([k2, l]) => <button key={l} type="button" onClick={() => set(`${p}기준`, k2)} className={`flex-1 h-9 rounded-xl text-[13px] font-extrabold border ${v[`${p}기준`] === k2 ? "bg-[#EEF3FB] text-[#1B2B4B] border-[#1B2B4B]" : "bg-white text-[#5E6B82] border-[#DCE3EE]"}`}>{l}</button>)}
+      </div>
+    </div>
+  );
+
+  const save = async () => {
+    if (!onCount || saving) return;
+    if (on.상차일 && on.하차일 && v.상차일 && v.하차일 && v.하차일 < v.상차일) { alert("하차일이 상차일보다 빨라요."); return; }
+    if ((on.상차시간 && !v.상차T) || (on.하차시간 && !v.하차T)) { alert("바꿀 시간을 골라 주세요."); return; }
+    if (on.기사 && !String(v.차량번호).trim()) { alert("차량번호를 넣어 주세요."); return; }
+    if (!(await kpConfirm(`선택한 ${orders.length}건을 한 번에 수정할까요?\n켠 칸 ${onCount}개만 바뀌어요.`, { okText: `${orders.length}건 수정` }))) return;
+    setSaving(true);
+    let ok = 0, fail = 0;
+    const plate = String(v.차량번호 || "").trim();
+    for (const order of orders) {
+      try {
+        const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
+        const col = order.__col || "orders";
+        const id = order._id || order.id;
+        const patch = { updatedAt: serverTimestamp(), _lastModified: Date.now() };
+        if (on.상차일 && v.상차일) patch.상차일 = v.상차일;
+        if (on.하차일 && v.하차일) patch.하차일 = v.하차일;
+        const pd = patch.상차일 || order.상차일, dd = patch.하차일 || order.하차일;
+        if (pd && dd && dd < pd) { fail += 1; continue; } // 하차일이 상차일보다 빨라지는 오더는 건너뜀
+        if (on.상차시간 && v.상차T) { patch.상차시간 = `${v.상차AP} ${v.상차T}`; patch.상차시간기준 = v.상차기준 || null; }
+        if (on.하차시간 && v.하차T) { patch.하차시간 = `${v.하차AP} ${v.하차T}`; patch.하차시간기준 = v.하차기준 || null; }
+        if (on.청구운임) patch.청구운임 = Number(String(v.청구운임).replace(/[^\d]/g, "")) || 0;
+        if (on.기사운임) patch.기사운임 = Number(String(v.기사운임).replace(/[^\d-]/g, "")) || 0;
+        if ("청구운임" in patch || "기사운임" in patch) {
+          const nx = { ...order, ...patch };
+          if ((Number(nx.청구운임) || 0) !== (Number(order.청구운임) || 0) || (Number(nx.기사운임) || 0) !== (Number(order.기사운임) || 0)) patch.수수료 = nextFee(order, nx);
+        }
+        if (on.차량종류 && v.차량종류.trim()) patch.차량종류 = v.차량종류.trim();
+        if (on.차량톤수 && v.차량톤수.trim()) patch.차량톤수 = v.차량톤수.trim();
+        if (on.지급방식 && !isShipperOrder) patch.지급방식 = v.지급방식;
+        if (on.배차방식) Object.assign(patch, { 배차방식: v.배차방식, ...v.dispWay });
+        if (on.전달상태) Object.assign(patch, { 업체전달상태: v.업체전달상태, 정보전달상태: v.업체전달상태, 정보전달완료: v.업체전달상태 === "전달완료" });
+        if (on.메모) patch.메모 = v.메모;
+        if (on.전달사항) patch.전달사항 = v.전달사항;
+        if (on.기사 && plate) {
+          Object.assign(patch, { 차량번호: plate, 기사명: v.이름, 이름: v.이름, 전화번호: v.전화번호, 전화: v.전화번호 });
+          if (!order.차량번호) Object.assign(patch, { 배차상태: "배차완료", 상태: "배차완료", 배차완료일시: serverTimestamp(), 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName });
+          if (nd(plate) !== nd(order.차량번호 || "") && !(!isShipperOrder && isPayCancel(patch.지급방식 ?? order.지급방식))) {
+            const dr = (drivers || []).find((d) => nd(d.차량번호) === nd(plate));
+            if (isFleetGrade(dr?.등급) && !!dr.uid) {
+              Object.assign(patch, { 기사확인상태: "대기", 기사거절사유: null, 기사확인일시: null, 기사완료일시: null, 배차상태: "승인대기" });
+              addDoc(collection(db, "driver_notifications"), { driverId: dr.id, type: "new_order", orderId: id, title: "배차오더가 도착했습니다", body: `${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"}`, createdAt: serverTimestamp(), read: false }).catch(() => {});
+            }
+          }
+        }
+        applyPayTypeRuleMobile(order, patch);
+        { const h = buildHistoryEntries(order, patch, auth.currentUser?.email); if (h.length) patch.history = arrayUnion(...h); }
+        patch.최종수정자 = auth.currentUser?.email || "";
+        if (order?.배차표Id) requestRouteSheetPush(order.배차표Id, 2500, order.상차일);
+        await updateDoc(doc(db, col, id), patch);
+        syncShipperMirrorMobile(order, patch).catch(() => {});
+        ok += 1;
+      } catch (e) { fail += 1; console.warn("[일괄수정]", e); }
+    }
+    // 새 기사면 기사관리에 등록(한 건 수정과 같게)
+    if (on.기사 && plate && typeof upsertDriver === "function" && !(drivers || []).some((d) => nd(d.차량번호) === nd(plate))) {
+      Promise.resolve(upsertDriver({ 차량번호: plate, 이름: v.이름 || "", 전화번호: v.전화번호 || "" })).catch(() => {});
+    }
+    setSaving(false);
+    showToast?.(`${ok}건 수정했어요${fail ? ` · ${fail}건은 못 바꿨어요(하차일이 상차일보다 빠름 등)` : ""}`);
+    onDone?.();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[10050] flex flex-col justify-end" role="dialog" aria-label="일괄수정">
+      <div className="absolute inset-0 bg-[#0B1428]/55" onClick={() => !saving && onClose?.()} />
+      <div className="relative bg-[#F4F6FA] rounded-t-[24px] max-h-[92vh] flex flex-col shadow-[0_-12px_40px_rgba(11,20,40,0.35)]">
+        <div className="px-5 pt-3 pb-3 rounded-t-[24px] text-white shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+          <div className="mx-auto w-10 h-1 rounded-full bg-white/30 mb-3" />
+          <div className="flex items-center gap-3">
+            <div className="min-w-0"><div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">BULK EDIT</div><div className="text-[18px] font-black">일괄수정 · {orders.length}건</div></div>
+            <button type="button" onClick={onClose} disabled={saving} className="ml-auto w-9 h-9 rounded-xl bg-white/10 border border-white/20 text-[15px] font-bold">✕</button>
+          </div>
+          <div className="mt-2 text-[12.5px] text-white/75 font-bold">바꿀 칸만 눌러서 켜요. 켜지 않은 칸은 오더마다 지금 값 그대로예요.</div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2.5" style={{ WebkitOverflowScrolling: "touch" }}>
+          {Row({ k: "상차일", label: "상차일", children: <><input type="date" value={v.상차일} onChange={(e) => set("상차일", e.target.value)} className={cls} /></> })}
+          {Row({ k: "하차일", label: "하차일", children: <><input type="date" value={v.하차일} onChange={(e) => set("하차일", e.target.value)} className={cls} /></> })}
+          {Row({ k: "상차시간", label: "상차시간", hint: "오전 / 오후 · 30분 단위 · 이전 / 이후", children: <>{TimeBox({ p: "상차" })}</> })}
+          {Row({ k: "하차시간", label: "하차시간", hint: "오전 / 오후 · 30분 단위 · 이전 / 이후", children: <>{TimeBox({ p: "하차" })}</> })}
+          {Row({ k: "청구운임", label: "청구운임", hint: "바꾸면 수수료도 다시 계산돼요", children: <><input inputMode="numeric" value={v.청구운임} onChange={(e) => set("청구운임", money(e.target.value))} placeholder="0" className={`${cls} text-right`} /></> })}
+          {Row({ k: "기사운임", label: "기사운임", hint: "바꾸면 수수료도 다시 계산돼요", children: <><input inputMode="numeric" value={v.기사운임} onChange={(e) => set("기사운임", money(e.target.value))} placeholder="0" className={`${cls} text-right`} /></> })}
+          {Row({ k: "기사", label: "기사 배정(차량번호 · 기사명 · 전화번호)", hint: "넣으면 배차완료 · 지입 기사는 기사앱 승인 요청", children: <>
+            <div className="space-y-2">
+              <input value={v.차량번호} onChange={(e) => pickPlate(e.target.value)} placeholder="차량번호(등록된 기사면 이름 · 전화 자동)" className={cls} />
+              <div className="grid grid-cols-2 gap-2">
+                <input value={v.이름} onChange={(e) => set("이름", e.target.value)} placeholder="기사명" className={cls} />
+                <input inputMode="tel" value={v.전화번호} onChange={(e) => set("전화번호", e.target.value)} placeholder="전화번호" className={cls} />
+              </div>
+            </div>
+          </> })}
+          {Row({ k: "차량종류", label: "차량종류", children: <><input value={v.차량종류} onChange={(e) => set("차량종류", e.target.value)} placeholder="예: 윙바디" className={cls} /></> })}
+          {Row({ k: "차량톤수", label: "차량톤수", children: <><input value={v.차량톤수} onChange={(e) => set("차량톤수", e.target.value)} placeholder="예: 5톤" className={cls} /></> })}
+          {Row({ k: "지급방식", label: "지급방식", hint: "화주사 오더는 바뀌지 않아요 · 취소로 바꾸면 배차취소", children: <>
+            <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" style={{ minHeight: 44 }} className={cls} value={v.지급방식} onChange={(x) => set("지급방식", x)} />
+          </> })}
+          {Row({ k: "배차방식", label: "배차방식", children: <>
+            <DispatchWayPicker style={{ minHeight: 44 }} className={cls} value={v.배차방식} dir={v.dispWay.콜구분 || ""} onPick={(pk) => setV((p) => ({ ...p, 배차방식: pk.배차방식 ?? "", ...(pk.콜구분 !== undefined ? { dispWay: { 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" } } : {}) }))} />
+          </> })}
+          {Row({ k: "전달상태", label: "업체 전달상태", children: <>
+            <div className="flex gap-2">{["미전달", "전달완료"].map((x) => <button key={x} type="button" onClick={() => set("업체전달상태", x)} className={`flex-1 h-10 rounded-xl text-[14px] font-extrabold border ${v.업체전달상태 === x ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{x}</button>)}</div>
+          </> })}
+          {Row({ k: "메모", label: "메모(내부용)", hint: "지금 메모를 이 내용으로 바꿔요", children: <><textarea value={v.메모} onChange={(e) => set("메모", e.target.value)} rows={3} className={`${cls} h-auto py-2`} /></> })}
+          {Row({ k: "전달사항", label: "전달사항(기사전달용)", hint: "지금 전달사항을 이 내용으로 바꿔요", children: <><textarea value={v.전달사항} onChange={(e) => set("전달사항", e.target.value)} rows={3} className={`${cls} h-auto py-2`} /></> })}
+        </div>
+        <div className="shrink-0 px-4 pt-3 pb-[max(14px,env(safe-area-inset-bottom))] bg-white border-t border-[#E3E8F0] flex gap-2">
+          <button type="button" onClick={onClose} disabled={saving} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-extrabold text-[#3A4A66]">취소</button>
+          <button type="button" onClick={save} disabled={!onCount || saving}
+            className="flex-1 h-12 rounded-xl text-white text-[15px] font-black disabled:opacity-40" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 55%,#2D4C82)" }}>
+            {saving ? "수정 중…" : onCount ? `${orders.length}건 수정 · 칸 ${onCount}개` : "바꿀 칸을 켜 주세요"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, dispatcherName = "", upsertDriver, showToast }) {
   const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
   const smartRef = useRef(null);
