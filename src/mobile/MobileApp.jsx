@@ -6042,7 +6042,7 @@ const title =
   // ⚠️ z-50이던 시절엔 다른 화면 요소(하단 액션바 등)가 같은 z-50으로 뒤에 그려지는
   // 순서상 토스트를 덮어버려 안 보이는 경우가 있었다. 다른 팝업들처럼 확실히
   // 최상단(z-[999999])에 뜨도록 올리고, 하단 네비/버튼 위로 자리도 더 띄운다.
-  <div style={{ bottom: "calc(104px + env(safe-area-inset-bottom, 0px))" }} /* 📱 2026-11-28 하단 메뉴바 위 */ className="kp-m-toast fixed left-1/2 -translate-x-1/2 z-[999999]
+  <div style={{ bottom: "calc(84px + env(safe-area-inset-bottom, 0px))" }} /* 📱 2026-11-28 하단 메뉴바 위 */ className="kp-m-toast fixed left-1/2 -translate-x-1/2 z-[999999]
                   bg-[#0F1A30]/95 text-white px-4 py-3 rounded-2xl shadow-[0_10px_24px_rgba(11,20,40,0.3)]
                   flex items-center gap-3 max-w-[95vw]">
     {/* 분할화면 등 화면 폭이 좁아져도 메시지가 3줄로 꺾여 보이지 않도록
@@ -6523,7 +6523,7 @@ onGoAttendance={() => {
         />
       )}
 
-      <div className="flex-1 overflow-y-auto pb-24" style={{ paddingBottom: page === "form" ? undefined : "calc(112px + env(safe-area-inset-bottom, 0px))" /* 📱 2026-11-28 하단 메뉴바에 끝 내용이 가리지 않게 */, WebkitOverflowScrolling: "touch", scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }}>
+      <div className="flex-1 overflow-y-auto pb-24" style={{ paddingBottom: page === "form" ? undefined : "calc(96px + env(safe-area-inset-bottom, 0px))" /* 📱 2026-11-28 하단 메뉴바에 끝 내용이 가리지 않게 */, WebkitOverflowScrolling: "touch", scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }}>
         {page === "notice" && (
           <React.Suspense fallback={null}>
             <MobilePcView kind="notice" userCompany={pcViewCompany} me={pcViewMe} role={role} />

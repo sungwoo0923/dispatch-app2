@@ -118,8 +118,9 @@ export default function MobileBottomNav({ items = [], zoom = 1, hidden = false, 
       style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 45, pointerEvents: hidden ? "none" : "auto", transform: hidden ? "translateY(130%)" : "none", transition: "transform .25s ease", fontFamily: MONO }}>
       <style>{".kp-m-bottomnav button:focus:not(:focus-visible){outline:none}.kp-m-bottomnav button:focus-visible{outline:2px solid #2D4C82;outline-offset:2px;border-radius:14px}"}</style>
       <div style={{ zoom }}>
-        <div style={{ padding: "0 10px max(10px, env(safe-area-inset-bottom, 0px))", background: "linear-gradient(180deg, rgba(238,242,248,0) 0%, rgba(238,242,248,.92) 45%)" }}>
-          <div style={{ maxWidth: 560, margin: "0 auto", height: 70, borderRadius: 24, background: "rgba(255,255,255,.95)", border: "1px solid #D6E0F0", boxShadow: "0 12px 32px rgba(11,20,40,.16), inset 0 1px 0 #fff", backdropFilter: "blur(16px) saturate(1.5)", WebkitBackdropFilter: "blur(16px) saturate(1.5)", display: "flex", alignItems: "flex-end", padding: "0 4px 7px", boxSizing: "border-box" }}>
+        {/* 🛠 2026-11-28 사용자 요청 — 떠 있는 둥근 바 대신 화면 맨 아래에 딱 붙고 양쪽 끝까지 꽉 찬 바(아래 홈 버튼 줄까지 같은 흰 바탕) */}
+        <div style={{ background: "#fff", borderTop: "1px solid #DCE3EE", boxShadow: "0 -6px 20px rgba(11,20,40,.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+          <div style={{ maxWidth: 640, margin: "0 auto", height: 64, display: "flex", alignItems: "flex-end", padding: "0 6px 7px", boxSizing: "border-box" }}>
             {items.map((it) => (
               <button key={it.key} type="button" data-nav={it.key} aria-current={it.active ? "page" : undefined}
                 onPointerDown={() => start(it.key)} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop}
@@ -128,7 +129,7 @@ export default function MobileBottomNav({ items = [], zoom = 1, hidden = false, 
                 style={{ flex: 1, minWidth: 0, position: "relative", border: "none", background: "none", padding: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "pointer", WebkitTapHighlightColor: "transparent", WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none",
                   color: it.center || it.active ? "#0B1428" : "#6B7A94", fontWeight: it.center || it.active ? 900 : 700, fontSize: "min(12.5px, 3.3vw)", letterSpacing: "-0.2px", whiteSpace: "nowrap" }}>
                 {it.center ? (
-                  <span style={{ width: 56, height: 56, marginTop: -28, borderRadius: 19, display: "grid", placeItems: "center", color: "#fff", background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)", border: "4px solid #EEF2F8", boxShadow: "0 12px 24px rgba(15,26,48,.36), inset 0 1px 0 rgba(255,255,255,.2)", boxSizing: "border-box" }}>
+                  <span style={{ width: 56, height: 56, marginTop: -30, borderRadius: 19, display: "grid", placeItems: "center", color: "#fff", background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)", border: "4px solid #fff", boxShadow: "0 10px 22px rgba(15,26,48,.32), inset 0 1px 0 rgba(255,255,255,.2)", boxSizing: "border-box" }}>
                     <NavIcon name={it.icon} size={it.icon === "plus" ? 26 : 23} stroke={it.icon === "plus" ? 2.6 : 2.1} />
                   </span>
                 ) : (
